@@ -121,24 +121,65 @@ describe('SupabaseRepository', () => {
     ]);
   });
 
-  it('getGoals reads the single goals row and returns null when absent', async () => {
+  it('getDefaultGoals reads the single goals row and returns null when absent', async () => {
     const goals: Goals = { calories: 2200, carbs: 250, protein: 140, fat: 70 };
     const withRow = fakeClient({ data: goals });
-    await expect(new SupabaseRepository(withRow.client).getGoals()).resolves.toEqual(goals);
+    await expect(new SupabaseRepository(withRow.client).getDefaultGoals()).resolves.toEqual(goals);
     expect(withRow.calls.map((c) => c.method)).toEqual(['from', 'select', 'maybeSingle']);
 
     const withoutRow = fakeClient({ data: null });
-    await expect(new SupabaseRepository(withoutRow.client).getGoals()).resolves.toBeNull();
+    await expect(new SupabaseRepository(withoutRow.client).getDefaultGoals()).resolves.toBeNull();
   });
 
-  it('saveGoals upserts the goals payload', async () => {
+  it('saveDefaultGoals upserts the goals payload', async () => {
     const goals: Goals = { calories: 2200, carbs: 250, protein: 140, fat: 70 };
     const { client, calls } = fakeClient();
-    await new SupabaseRepository(client).saveGoals(goals);
+    await new SupabaseRepository(client).saveDefaultGoals(goals);
 
     expect(calls).toEqual([
       { method: 'from', args: ['goals'] },
       { method: 'upsert', args: [goals] },
+    ]);
+  });
+
+  it('getGoalsForDate reads the daily_goals row for that date and returns null when absent', async () => {
+    const goals: Goals = { calories: 1800, carbs: 200, protein: 120, fat: 60 };
+    const withRow = fakeClient({ data: goals });
+    await expect(
+      new SupabaseRepository(withRow.client).getGoalsForDate('2026-07-05'),
+    ).resolves.toEqual(goals);
+    expect(withRow.calls).toEqual([
+      { method: 'from', args: ['daily_goals'] },
+      { method: 'select', args: ['calories, carbs, protein, fat'] },
+      { method: 'eq', args: ['date', '2026-07-05'] },
+      { method: 'maybeSingle', args: [] },
+    ]);
+
+    const withoutRow = fakeClient({ data: null });
+    await expect(
+      new SupabaseRepository(withoutRow.client).getGoalsForDate('2026-07-05'),
+    ).resolves.toBeNull();
+  });
+
+  it('saveGoalsForDate upserts the goals payload with the date', async () => {
+    const goals: Goals = { calories: 1800, carbs: 200, protein: 120, fat: 60 };
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).saveGoalsForDate('2026-07-05', goals);
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['daily_goals'] },
+      { method: 'upsert', args: [{ ...goals, date: '2026-07-05' }] },
+    ]);
+  });
+
+  it('clearGoalsForDate deletes the daily_goals row for that date', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).clearGoalsForDate('2026-07-05');
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['daily_goals'] },
+      { method: 'delete', args: [] },
+      { method: 'eq', args: ['date', '2026-07-05'] },
     ]);
   });
 
@@ -147,11 +188,18 @@ describe('SupabaseRepository', () => {
     ['addEntry', (r: SupabaseRepository) => r.addEntry(entry)],
     ['updateEntry', (r: SupabaseRepository) => r.updateEntry(entry)],
     ['deleteEntry', (r: SupabaseRepository) => r.deleteEntry('id-1')],
-    ['getGoals', (r: SupabaseRepository) => r.getGoals()],
+    ['getDefaultGoals', (r: SupabaseRepository) => r.getDefaultGoals()],
     [
-      'saveGoals',
-      (r: SupabaseRepository) => r.saveGoals({ calories: 1, carbs: 1, protein: 1, fat: 1 }),
+      'saveDefaultGoals',
+      (r: SupabaseRepository) => r.saveDefaultGoals({ calories: 1, carbs: 1, protein: 1, fat: 1 }),
     ],
+    ['getGoalsForDate', (r: SupabaseRepository) => r.getGoalsForDate('2026-07-05')],
+    [
+      'saveGoalsForDate',
+      (r: SupabaseRepository) =>
+        r.saveGoalsForDate('2026-07-05', { calories: 1, carbs: 1, protein: 1, fat: 1 }),
+    ],
+    ['clearGoalsForDate', (r: SupabaseRepository) => r.clearGoalsForDate('2026-07-05')],
   ])('%s throws when Supabase returns an error', async (_name, run) => {
     const { client } = fakeClient({ error: { message: 'permission denied' } });
     await expect(run(new SupabaseRepository(client))).rejects.toThrow(/permission denied/);

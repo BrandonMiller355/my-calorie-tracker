@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DateNav } from '../components/DateNav';
+import { DayGoalEditor } from '../components/DayGoalEditor';
 import { EntryForm } from '../components/EntryForm';
 import { MealSection } from '../components/MealSection';
 import { Summary } from '../components/Summary';
@@ -26,10 +27,13 @@ export function DayLogScreen() {
     entriesLoading,
     goals,
     goalsAreDefault,
+    dayGoalIsOverridden,
     loadFailed,
     retryLoad,
     setDate,
     deleteEntry,
+    saveDayGoals,
+    clearDayGoals,
   } = useAppState();
   const [form, setForm] = useState<FormMode>(null);
   const [deleteFailed, setDeleteFailed] = useState(false);
@@ -68,6 +72,14 @@ export function DayLogScreen() {
     <div className="day-log">
       <DateNav date={date} onChange={setDate} />
       <Summary totals={totals} goals={goals} goalsAreDefault={goalsAreDefault} />
+      <DayGoalEditor
+        key={date}
+        date={date}
+        goals={goals}
+        dayGoalIsOverridden={dayGoalIsOverridden}
+        onSave={saveDayGoals}
+        onClear={clearDayGoals}
+      />
 
       {deleteFailed && (
         <p className="error-banner" role="alert">

@@ -16,9 +16,11 @@ interface AppState {
   date: string;
   entries: FoodEntry[];
   entriesLoading: boolean;
-  goals: Goals;
-  /** true until the user saves goals for the first time */
+  defaultGoals: Goals;
+  /** true until the user saves default goals for the first time */
   goalsAreDefault: boolean;
+  /** override for `date`; null when this day uses defaultGoals */
+  dayGoalOverride: Goals | null;
   /** true when loading entries or goals from the backend failed */
   loadFailed: boolean;
 }
@@ -29,15 +31,18 @@ type Action =
   | { type: 'entry-added'; entry: FoodEntry }
   | { type: 'entry-updated'; entry: FoodEntry }
   | { type: 'entry-deleted'; id: string }
-  | { type: 'goals-loaded'; goals: Goals | null }
-  | { type: 'goals-saved'; goals: Goals }
+  | { type: 'default-goals-loaded'; goals: Goals | null }
+  | { type: 'default-goals-saved'; goals: Goals }
+  | { type: 'day-goal-loaded'; date: string; goals: Goals | null }
+  | { type: 'day-goal-saved'; goals: Goals }
+  | { type: 'day-goal-cleared' }
   | { type: 'load-failed' }
   | { type: 'retry-load' };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'set-date':
-      return { ...state, date: action.date, entriesLoading: true };
+      return { ...state, date: action.date, entriesLoading: true, dayGoalOverride: null };
     case 'entries-loaded':
       // Ignore loads for a date the user has already navigated away from
       if (action.date !== state.date) return state;
@@ -53,12 +58,20 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'entry-deleted':
       return { ...state, entries: state.entries.filter((e) => e.id !== action.id) };
-    case 'goals-loaded':
+    case 'default-goals-loaded':
       return action.goals
-        ? { ...state, goals: action.goals, goalsAreDefault: false }
+        ? { ...state, defaultGoals: action.goals, goalsAreDefault: false }
         : state;
-    case 'goals-saved':
-      return { ...state, goals: action.goals, goalsAreDefault: false };
+    case 'default-goals-saved':
+      return { ...state, defaultGoals: action.goals, goalsAreDefault: false };
+    case 'day-goal-loaded':
+      // Ignore loads for a date the user has already navigated away from
+      if (action.date !== state.date) return state;
+      return { ...state, dayGoalOverride: action.goals };
+    case 'day-goal-saved':
+      return { ...state, dayGoalOverride: action.goals };
+    case 'day-goal-cleared':
+      return { ...state, dayGoalOverride: null };
     case 'load-failed':
       return { ...state, loadFailed: true, entriesLoading: false };
     case 'retry-load':
@@ -67,13 +80,21 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 export interface AppContextValue extends AppState {
+  /** Effective goals for `date`: dayGoalOverride if set, else defaultGoals */
+  goals: Goals;
+  /** true when `date` has its own override rather than using defaultGoals */
+  dayGoalIsOverridden: boolean;
   setDate: (date: string) => void;
   /** Re-runs the failed goal/entry loads after loadFailed */
   retryLoad: () => void;
   addEntry: (entry: Omit<FoodEntry, 'id'>) => Promise<void>;
   updateEntry: (entry: FoodEntry) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
-  saveGoals: (goals: Goals) => Promise<void>;
+  saveDefaultGoals: (goals: Goals) => Promise<void>;
+  /** Sets an override for the current `date` only. */
+  saveDayGoals: (goals: Goals) => Promise<void>;
+  /** Removes the current date's override, reverting it to defaultGoals. */
+  clearDayGoals: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -89,17 +110,18 @@ export function AppProvider({
     date: todayKey(),
     entries: [],
     entriesLoading: true,
-    goals: DEFAULT_GOALS,
+    defaultGoals: DEFAULT_GOALS,
     goalsAreDefault: true,
+    dayGoalOverride: null,
     loadFailed: false,
   });
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    repository.getGoals().then(
+    repository.getDefaultGoals().then(
       (goals) => {
-        if (!cancelled) dispatch({ type: 'goals-loaded', goals });
+        if (!cancelled) dispatch({ type: 'default-goals-loaded', goals });
       },
       () => {
         if (!cancelled) dispatch({ type: 'load-failed' });
@@ -115,6 +137,21 @@ export function AppProvider({
     repository.getEntriesByDate(state.date).then(
       (entries) => {
         if (!cancelled) dispatch({ type: 'entries-loaded', date: state.date, entries });
+      },
+      () => {
+        if (!cancelled) dispatch({ type: 'load-failed' });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [repository, state.date, reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    repository.getGoalsForDate(state.date).then(
+      (goals) => {
+        if (!cancelled) dispatch({ type: 'day-goal-loaded', date: state.date, goals });
       },
       () => {
         if (!cancelled) dispatch({ type: 'load-failed' });
@@ -157,17 +194,57 @@ export function AppProvider({
     [repository],
   );
 
-  const saveGoals = useCallback(
+  const saveDefaultGoals = useCallback(
     async (goals: Goals) => {
-      await repository.saveGoals(goals);
-      dispatch({ type: 'goals-saved', goals });
+      await repository.saveDefaultGoals(goals);
+      dispatch({ type: 'default-goals-saved', goals });
     },
     [repository],
   );
 
+  const saveDayGoals = useCallback(
+    async (goals: Goals) => {
+      await repository.saveGoalsForDate(state.date, goals);
+      dispatch({ type: 'day-goal-saved', goals });
+    },
+    [repository, state.date],
+  );
+
+  const clearDayGoals = useCallback(async () => {
+    await repository.clearGoalsForDate(state.date);
+    dispatch({ type: 'day-goal-cleared' });
+  }, [repository, state.date]);
+
+  const goals = state.dayGoalOverride ?? state.defaultGoals;
+  const dayGoalIsOverridden = state.dayGoalOverride !== null;
+
   const value = useMemo<AppContextValue>(
-    () => ({ ...state, setDate, retryLoad, addEntry, updateEntry, deleteEntry, saveGoals }),
-    [state, setDate, retryLoad, addEntry, updateEntry, deleteEntry, saveGoals],
+    () => ({
+      ...state,
+      goals,
+      dayGoalIsOverridden,
+      setDate,
+      retryLoad,
+      addEntry,
+      updateEntry,
+      deleteEntry,
+      saveDefaultGoals,
+      saveDayGoals,
+      clearDayGoals,
+    }),
+    [
+      state,
+      goals,
+      dayGoalIsOverridden,
+      setDate,
+      retryLoad,
+      addEntry,
+      updateEntry,
+      deleteEntry,
+      saveDefaultGoals,
+      saveDayGoals,
+      clearDayGoals,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

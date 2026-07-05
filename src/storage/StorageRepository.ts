@@ -11,7 +11,12 @@ export interface StorageRepository {
   addEntry(entry: FoodEntry): Promise<void>;
   updateEntry(entry: FoodEntry): Promise<void>;
   deleteEntry(id: string): Promise<void>;
-  /** null when the user has never saved goals (app should use defaults). */
-  getGoals(): Promise<Goals | null>;
-  saveGoals(goals: Goals): Promise<void>;
+  /** null when the user has never saved default goals (app should use DEFAULT_GOALS). */
+  getDefaultGoals(): Promise<Goals | null>;
+  saveDefaultGoals(goals: Goals): Promise<void>;
+  /** Per-day override; null when that date has none (app should use the default). */
+  getGoalsForDate(date: string): Promise<Goals | null>;
+  saveGoalsForDate(date: string, goals: Goals): Promise<void>;
+  /** Removes the override so the date falls back to the default. */
+  clearGoalsForDate(date: string): Promise<void>;
 }

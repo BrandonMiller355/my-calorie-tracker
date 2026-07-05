@@ -79,7 +79,7 @@ export class SupabaseRepository implements StorageRepository {
     if (error) throw new Error(`Deleting entry failed: ${error.message}`);
   }
 
-  async getGoals(): Promise<Goals | null> {
+  async getDefaultGoals(): Promise<Goals | null> {
     const { data, error } = await this.client
       .from('goals')
       .select('calories, carbs, protein, fat')
@@ -88,10 +88,32 @@ export class SupabaseRepository implements StorageRepository {
     return data as Goals | null;
   }
 
-  async saveGoals(goals: Goals): Promise<void> {
+  async saveDefaultGoals(goals: Goals): Promise<void> {
     // user_id defaults to auth.uid() server-side; the conflict on the goals
     // primary key (user_id) turns repeat saves into updates.
     const { error } = await this.client.from('goals').upsert(goals);
     if (error) throw new Error(`Saving goals failed: ${error.message}`);
+  }
+
+  async getGoalsForDate(date: string): Promise<Goals | null> {
+    const { data, error } = await this.client
+      .from('daily_goals')
+      .select('calories, carbs, protein, fat')
+      .eq('date', date)
+      .maybeSingle();
+    if (error) throw new Error(`Loading day goals failed: ${error.message}`);
+    return data as Goals | null;
+  }
+
+  async saveGoalsForDate(date: string, goals: Goals): Promise<void> {
+    // user_id defaults to auth.uid() server-side; the conflict on the
+    // daily_goals primary key (user_id, date) turns repeat saves into updates.
+    const { error } = await this.client.from('daily_goals').upsert({ ...goals, date });
+    if (error) throw new Error(`Saving day goals failed: ${error.message}`);
+  }
+
+  async clearGoalsForDate(date: string): Promise<void> {
+    const { error } = await this.client.from('daily_goals').delete().eq('date', date);
+    if (error) throw new Error(`Clearing day goals failed: ${error.message}`);
   }
 }

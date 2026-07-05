@@ -9,7 +9,8 @@ type RouterEntry = string | { pathname: string; state: unknown };
 /** In-memory StorageRepository with toggleable failures, for tests only. */
 class FakeRepository implements StorageRepository {
   private entries = new Map<string, FoodEntry>();
-  private goals: Goals | null = null;
+  private defaultGoals: Goals | null = null;
+  private dayGoals = new Map<string, Goals>();
   failReads = false;
   failWrites = false;
 
@@ -36,13 +37,26 @@ class FakeRepository implements StorageRepository {
     this.assertWrites();
     this.entries.delete(id);
   }
-  async getGoals(): Promise<Goals | null> {
+  async getDefaultGoals(): Promise<Goals | null> {
     this.assertReads();
-    return this.goals ? { ...this.goals } : null;
+    return this.defaultGoals ? { ...this.defaultGoals } : null;
   }
-  async saveGoals(goals: Goals): Promise<void> {
+  async saveDefaultGoals(goals: Goals): Promise<void> {
     this.assertWrites();
-    this.goals = { ...goals };
+    this.defaultGoals = { ...goals };
+  }
+  async getGoalsForDate(date: string): Promise<Goals | null> {
+    this.assertReads();
+    const goals = this.dayGoals.get(date);
+    return goals ? { ...goals } : null;
+  }
+  async saveGoalsForDate(date: string, goals: Goals): Promise<void> {
+    this.assertWrites();
+    this.dayGoals.set(date, { ...goals });
+  }
+  async clearGoalsForDate(date: string): Promise<void> {
+    this.assertWrites();
+    this.dayGoals.delete(date);
   }
 }
 
@@ -83,6 +97,21 @@ describe('App (spec scenario walkthrough)', () => {
     renderApp(new FakeRepository());
     await screen.findByRole('region', { name: 'Breakfast' });
     expect(screen.getByText('2000 kcal left')).toBeInTheDocument();
+  });
+
+  it('lets a single day override the default goal, then reset back to it', async () => {
+    renderApp(new FakeRepository());
+    await screen.findByRole('region', { name: 'Breakfast' });
+
+    fireEvent.click(screen.getByText('Set a custom goal for today'));
+    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '1500' } });
+    fireEvent.click(screen.getByText('Save for today'));
+
+    expect(await screen.findByText('1500 kcal left')).toBeInTheDocument();
+    expect(screen.getByText(/Using a custom goal for today/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Use default'));
+    expect(await screen.findByText('2000 kcal left')).toBeInTheDocument();
   });
 
   it('adds an entry, groups it by meal, and updates totals', async () => {

@@ -23,10 +23,15 @@ class FakeRepository implements StorageRepository {
   async addEntry(): Promise<void> {}
   async updateEntry(): Promise<void> {}
   async deleteEntry(): Promise<void> {}
-  async getGoals(): Promise<Goals | null> {
+  async getDefaultGoals(): Promise<Goals | null> {
     return null;
   }
-  async saveGoals(): Promise<void> {}
+  async saveDefaultGoals(): Promise<void> {}
+  async getGoalsForDate(): Promise<Goals | null> {
+    return null;
+  }
+  async saveGoalsForDate(): Promise<void> {}
+  async clearGoalsForDate(): Promise<void> {}
 }
 
 function renderSettings() {
@@ -49,14 +54,14 @@ describe('SettingsScreen theme toggle', () => {
 
   it('defaults to "Match device" and applies no override', async () => {
     renderSettings();
-    await screen.findByRole('heading', { name: 'Daily goals' });
+    await screen.findByRole('heading', { name: 'Default daily goal' });
     expect(screen.getByLabelText('Theme')).toHaveValue('system');
     expect(document.documentElement).not.toHaveAttribute('data-theme');
   });
 
   it('switches the app to dark mode and persists the choice', async () => {
     renderSettings();
-    await screen.findByRole('heading', { name: 'Daily goals' });
+    await screen.findByRole('heading', { name: 'Default daily goal' });
     fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'dark' } });
 
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');

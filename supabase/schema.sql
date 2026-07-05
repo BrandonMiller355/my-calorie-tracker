@@ -30,8 +30,21 @@ create table goals (
   fat numeric not null
 );
 
+-- Per-day overrides of the default in `goals`. A date with no row here falls
+-- back to the default.
+create table daily_goals (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  date text not null,
+  calories numeric not null,
+  carbs numeric not null,
+  protein numeric not null,
+  fat numeric not null,
+  primary key (user_id, date)
+);
+
 alter table food_entries enable row level security;
 alter table goals enable row level security;
+alter table daily_goals enable row level security;
 
 create policy "own entries select" on food_entries
   for select using (user_id = auth.uid());
@@ -49,4 +62,13 @@ create policy "own goals insert" on goals
 create policy "own goals update" on goals
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own goals delete" on goals
+  for delete using (user_id = auth.uid());
+
+create policy "own daily goals select" on daily_goals
+  for select using (user_id = auth.uid());
+create policy "own daily goals insert" on daily_goals
+  for insert with check (user_id = auth.uid());
+create policy "own daily goals update" on daily_goals
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own daily goals delete" on daily_goals
   for delete using (user_id = auth.uid());

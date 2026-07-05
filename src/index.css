@@ -237,6 +237,32 @@ body {
   margin: 0;
 }
 
+/* Day goal editor */
+.day-goal-editor {
+  margin-bottom: 16px;
+}
+
+.day-goal-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
+
+.day-goal-form {
+  max-width: 320px;
+  margin-bottom: 4px;
+}
+
 /* Meals */
 .meal-section {
   background: var(--card);

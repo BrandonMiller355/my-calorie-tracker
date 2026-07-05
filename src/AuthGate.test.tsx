@@ -24,13 +24,22 @@ vi.mock('./lib/supabase', () => ({
       signInWithPassword: mockAuth.signInWithPassword,
       signOut: mockAuth.signOut,
     },
-    // Enough of the PostgREST builder for AppProvider's initial loads
-    from: () => ({
-      select: () => ({
-        eq: () => Promise.resolve({ data: [], error: null }),
+    // Enough of the PostgREST builder for AppProvider's initial loads: select/eq
+    // chain (awaited directly for entries, or via maybeSingle for goals).
+    from: () => {
+      const builder: {
+        select: () => typeof builder;
+        eq: () => typeof builder;
+        maybeSingle: () => Promise<{ data: null; error: null }>;
+        then: (resolve: (result: { data: unknown[]; error: null }) => void) => void;
+      } = {
+        select: () => builder,
+        eq: () => builder,
         maybeSingle: () => Promise.resolve({ data: null, error: null }),
-      }),
-    }),
+        then: (resolve) => resolve({ data: [], error: null }),
+      };
+      return builder;
+    },
   },
 }));
 
