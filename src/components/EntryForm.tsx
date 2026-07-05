@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { checkMacroCalories } from '../lib/macroCheck';
 import { validateEntryForm, type EntryFormErrors, type EntryFormValues } from '../lib/validation';
 import { useAppState } from '../state/AppState';
 import { MEALS, MEAL_LABELS, type FoodEntry, type FoodSearchResult, type Meal } from '../types';
@@ -17,11 +18,12 @@ function numToField(n: number | undefined): string {
   return n === undefined ? '' : String(n);
 }
 
+const CALORIE_FIELD = { key: 'calories', label: 'Calories (kcal)' } as const;
+
 const NUTRIENT_FIELDS = [
-  { key: 'calories', label: 'Calories (kcal)' },
+  { key: 'fat', label: 'Fat (g)' },
   { key: 'carbs', label: 'Carbs (g)' },
   { key: 'protein', label: 'Protein (g)' },
-  { key: 'fat', label: 'Fat (g)' },
 ] as const;
 
 export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: EntryFormProps) {
@@ -60,6 +62,22 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
       setErrors(result.errors);
       return;
     }
+    const mismatch = checkMacroCalories(
+      result.parsed.calories,
+      result.parsed.carbs,
+      result.parsed.protein,
+      result.parsed.fat,
+    );
+    if (
+      mismatch &&
+      !window.confirm(
+        `The carbs, protein, and fat add up to about ${mismatch.expected} kcal, but you entered ` +
+          `${mismatch.entered} kcal. Save anyway?`,
+      )
+    ) {
+      return;
+    }
+
     setErrors({});
     setSaving(true);
     setSaveFailed(false);
@@ -95,8 +113,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
 
         {missingFromSearch.size > 0 && (
           <p className="form-note" role="alert">
-            Some nutrition values were missing from the search result. Please fill in the
-            highlighted fields before saving.
+            Some nutrition values were missing from the search result. They’ll be saved as 0
+            unless you fill in the highlighted fields.
           </p>
         )}
 
@@ -129,6 +147,18 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             onChange={(e) => setField('quantity', e.target.value)}
           />
           {errors.quantity && <span className="field-error">{errors.quantity}</span>}
+        </label>
+
+        <label>
+          {CALORIE_FIELD.label}
+          <input
+            inputMode="decimal"
+            value={values[CALORIE_FIELD.key]}
+            onChange={(e) => setField(CALORIE_FIELD.key, e.target.value)}
+          />
+          {errors[CALORIE_FIELD.key] && (
+            <span className="field-error">{errors[CALORIE_FIELD.key]}</span>
+          )}
         </label>
 
         <div className="nutrient-grid">

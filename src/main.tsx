@@ -4,13 +4,16 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthGate } from './AuthGate';
 import './index.css';
 import { AuthProvider } from './state/AuthProvider';
+import { ThemeProvider } from './state/ThemeProvider';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <AuthGate />
-      </AuthProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   </React.StrictMode>,
 );

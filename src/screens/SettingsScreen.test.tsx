@@ -1,0 +1,65 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { SettingsScreen } from './SettingsScreen';
+import { AppProvider } from '../state/AppState';
+import { AuthProvider } from '../state/AuthProvider';
+import { ThemeProvider } from '../state/ThemeProvider';
+import type { StorageRepository } from '../storage';
+import type { FoodEntry, Goals } from '../types';
+
+vi.mock('../lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({ data: { session: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signOut: vi.fn(async () => ({ error: null })),
+    },
+  },
+}));
+
+class FakeRepository implements StorageRepository {
+  async getEntriesByDate(): Promise<FoodEntry[]> {
+    return [];
+  }
+  async addEntry(): Promise<void> {}
+  async updateEntry(): Promise<void> {}
+  async deleteEntry(): Promise<void> {}
+  async getGoals(): Promise<Goals | null> {
+    return null;
+  }
+  async saveGoals(): Promise<void> {}
+}
+
+function renderSettings() {
+  return render(
+    <ThemeProvider>
+      <AuthProvider>
+        <AppProvider repository={new FakeRepository()}>
+          <SettingsScreen />
+        </AppProvider>
+      </AuthProvider>
+    </ThemeProvider>,
+  );
+}
+
+describe('SettingsScreen theme toggle', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('defaults to "Match device" and applies no override', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Daily goals' });
+    expect(screen.getByLabelText('Theme')).toHaveValue('system');
+    expect(document.documentElement).not.toHaveAttribute('data-theme');
+  });
+
+  it('switches the app to dark mode and persists the choice', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Daily goals' });
+    fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'dark' } });
+
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(localStorage.getItem('cal-tracker:theme')).toBe('dark');
+  });
+});

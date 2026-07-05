@@ -47,10 +47,18 @@ describe('validateEntryForm', () => {
     }
   });
 
-  it('rejects blank required fields (missing search macros must be confirmed)', () => {
-    const result = validateEntryForm(values({ protein: '' }));
+  it('defaults blank carbs/protein/fat to 0', () => {
+    const result = validateEntryForm(values({ carbs: '', protein: '', fat: '' }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.parsed).toMatchObject({ carbs: 0, protein: 0, fat: 0 });
+    }
+  });
+
+  it('rejects a blank calories field', () => {
+    const result = validateEntryForm(values({ calories: '' }));
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors.protein).toBeTruthy();
+    if (!result.ok) expect(result.errors.calories).toBeTruthy();
   });
 
   it('rejects empty name and non-positive quantity', () => {

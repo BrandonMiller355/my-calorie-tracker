@@ -115,8 +115,8 @@ export function SearchScreen() {
                 </span>
                 <span className="result-serving">{r.servingDesc}</span>
                 <span className="result-macros">
-                  {fmt(r.calories, 'kcal')} · C {fmt(r.carbs, 'g')} · P {fmt(r.protein, 'g')} · F{' '}
-                  {fmt(r.fat, 'g')}
+                  {fmt(r.calories, 'kcal')} · F {fmt(r.fat, 'g')} · C {fmt(r.carbs, 'g')} · P{' '}
+                  {fmt(r.protein, 'g')}
                 </span>
               </button>
             </li>

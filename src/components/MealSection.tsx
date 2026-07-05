@@ -38,14 +38,18 @@ export function MealSection({
                     )}
                   </span>
                   <span className="entry-macros">
-                    C {t.carbs} · P {t.protein} · F {t.fat}
+                    F {t.fat} · C {t.carbs} · P {t.protein}
                   </span>
                 </button>
                 <span className="entry-cal">{t.calories}</span>
                 <button
                   className="entry-delete"
                   aria-label={`Delete ${entry.name}`}
-                  onClick={() => onDelete(entry.id)}
+                  onClick={() => {
+                    if (window.confirm(`Delete ${entry.name}?`)) {
+                      onDelete(entry.id);
+                    }
+                  }}
                 >
                   ✕
                 </button>

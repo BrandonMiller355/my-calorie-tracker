@@ -3,6 +3,37 @@
 }
 
 :root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --text: #1c2330;
+  --muted: #6b7484;
+  --accent: #2f7d5d;
+  --accent-button: #2f7d5d;
+  --accent-soft: #e4f2ec;
+  --danger: #c23b3b;
+  --danger-soft: #fbe9e9;
+  --border: #e2e6ec;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181f;
+    --card: #1c222c;
+    --text: #e7eaf0;
+    --muted: #8b93a3;
+    --accent: #4fb385;
+    --accent-soft: #1d3329;
+    --danger: #e2685f;
+    --danger-soft: #3a2020;
+    --border: #2c333f;
+  }
+}
+
+/* Explicit overrides from the Settings theme toggle; win over the OS preference above. */
+:root[data-theme='light'] {
+  color-scheme: light;
   --bg: #f6f7f9;
   --card: #ffffff;
   --text: #1c2330;
@@ -12,7 +43,19 @@
   --danger: #c23b3b;
   --danger-soft: #fbe9e9;
   --border: #e2e6ec;
-  --radius: 10px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #14181f;
+  --card: #1c222c;
+  --text: #e7eaf0;
+  --muted: #8b93a3;
+  --accent: #4fb385;
+  --accent-soft: #1d3329;
+  --danger: #e2685f;
+  --danger-soft: #3a2020;
+  --border: #2c333f;
 }
 
 body {
@@ -319,6 +362,7 @@ body {
   max-width: 420px;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -329,7 +373,8 @@ body {
 }
 
 .entry-form label,
-.goals-form label {
+.goals-form label,
+.appearance-section label {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -340,7 +385,10 @@ body {
 .entry-form input,
 .entry-form select,
 .goals-form input,
+.appearance-section select,
 .search-input {
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
@@ -350,7 +398,7 @@ body {
 
 .nutrient-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -394,7 +442,7 @@ label.flagged input {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  background: var(--accent);
+  background: var(--accent-button);
   color: white;
 }
 
@@ -483,4 +531,14 @@ label.flagged input {
   color: var(--accent);
   font-weight: 600;
   margin-left: 10px;
+}
+
+.appearance-section {
+  max-width: 320px;
+  margin-top: 24px;
+}
+
+.appearance-section h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
 }

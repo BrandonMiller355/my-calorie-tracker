@@ -3,9 +3,9 @@ import type { Goals } from '../types';
 
 const METRICS = [
   { key: 'calories', label: 'Calories', unit: 'kcal' },
+  { key: 'fat', label: 'Fat', unit: 'g' },
   { key: 'carbs', label: 'Carbs', unit: 'g' },
   { key: 'protein', label: 'Protein', unit: 'g' },
-  { key: 'fat', label: 'Fat', unit: 'g' },
 ] as const;
 
 export function Summary({

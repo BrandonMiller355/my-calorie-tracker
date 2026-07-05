@@ -1,18 +1,26 @@
 import { useState, type FormEvent } from 'react';
 import { useAppState } from '../state/AppState';
 import { useAuth } from '../state/AuthProvider';
+import { useTheme, type ThemePreference } from '../state/ThemeProvider';
 import { DEFAULT_GOALS, type Goals } from '../types';
 
 const FIELDS = [
   { key: 'calories', label: 'Calories (kcal)' },
+  { key: 'fat', label: 'Fat (g)' },
   { key: 'carbs', label: 'Carbs (g)' },
   { key: 'protein', label: 'Protein (g)' },
-  { key: 'fat', label: 'Fat (g)' },
 ] as const;
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: 'Match device' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
 
 export function SettingsScreen() {
   const { goals, goalsAreDefault, saveGoals } = useAppState();
   const { signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [values, setValues] = useState<Record<keyof Goals, string>>({
     calories: String(goals.calories),
     carbs: String(goals.carbs),
@@ -49,8 +57,8 @@ export function SettingsScreen() {
       <h1>Daily goals</h1>
       {goalsAreDefault && (
         <p className="form-note">
-          You’re using the default goals ({DEFAULT_GOALS.calories} kcal, {DEFAULT_GOALS.carbs} g
-          carbs, {DEFAULT_GOALS.protein} g protein, {DEFAULT_GOALS.fat} g fat). Save your own
+          You’re using the default goals ({DEFAULT_GOALS.calories} kcal, {DEFAULT_GOALS.fat} g
+          fat, {DEFAULT_GOALS.carbs} g carbs, {DEFAULT_GOALS.protein} g protein). Save your own
           below.
         </p>
       )}
@@ -69,6 +77,24 @@ export function SettingsScreen() {
         <button type="submit">Save goals</button>
         {saved && <span className="saved-note">Saved ✓</span>}
       </form>
+
+      <div className="appearance-section">
+        <h2>Appearance</h2>
+        <label>
+          Theme
+          <select
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as ThemePreference)}
+          >
+            {THEME_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <div className="signout-section">
         <button type="button" className="secondary" onClick={() => void signOut()}>
           Sign out

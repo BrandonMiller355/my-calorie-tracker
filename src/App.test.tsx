@@ -75,6 +75,10 @@ async function addFood(
 }
 
 describe('App (spec scenario walkthrough)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('empty day shows zero totals', async () => {
     renderApp(new FakeRepository());
     await screen.findByRole('region', { name: 'Breakfast' });
@@ -95,6 +99,32 @@ describe('App (spec scenario walkthrough)', () => {
     expect(within(breakfast).getByText('Oatmeal')).toBeInTheDocument();
     expect(within(breakfast).getByText('300 kcal')).toBeInTheDocument(); // meal subtotal
     expect(screen.getByText('1700 kcal left')).toBeInTheDocument();
+  });
+
+  it('warns when calories do not match the macros, and blocks save until confirmed', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderApp(new FakeRepository());
+    const section = await screen.findByRole('region', { name: 'Lunch' });
+    fireEvent.click(within(section).getByText('+ Add food'));
+
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Suspicious bar' } });
+    // 5*4 + 1*4 + 1*9 = 33 kcal from macros, nowhere near 400
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '400' } });
+    fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '5' } });
+    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '1' } });
+    fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '1' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+
+    // Declining the warning keeps the form open and saves nothing
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('33'));
+    expect(screen.queryByText('Suspicious bar')).toBeNull();
+    expect(screen.getByRole('form', { name: 'Add food entry' })).toBeInTheDocument();
+
+    // Confirming the warning proceeds with the save
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(within(form).getByText('Add to log'));
+    expect(await screen.findByText('Suspicious bar')).toBeInTheDocument();
   });
 
   it('rejects invalid nutrition values without saving', async () => {
@@ -128,12 +158,23 @@ describe('App (spec scenario walkthrough)', () => {
   });
 
   it('deletes an entry and totals update immediately', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderApp(new FakeRepository());
     await addFood('Snacks', { name: 'Chips', calories: '150', carbs: '15', protein: '2', fat: '9' });
 
     fireEvent.click(screen.getByLabelText('Delete Chips'));
     await waitFor(() => expect(screen.queryByText('Chips')).toBeNull());
     expect(screen.getByText('2000 kcal left')).toBeInTheDocument();
+  });
+
+  it('keeps the entry when the delete confirmation is dismissed', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderApp(new FakeRepository());
+    await addFood('Snacks', { name: 'Chips', calories: '150', carbs: '15', protein: '2', fat: '9' });
+
+    fireEvent.click(screen.getByLabelText('Delete Chips'));
+    expect(screen.getByText('Chips')).toBeInTheDocument();
+    expect(screen.getByText('1850 kcal left')).toBeInTheDocument();
   });
 
   it('data persists across an app restart with the same repository', async () => {
@@ -147,7 +188,7 @@ describe('App (spec scenario walkthrough)', () => {
     expect(screen.getByText('1600 kcal left')).toBeInTheDocument();
   });
 
-  it('search prefill with missing macros flags fields and requires confirmation', async () => {
+  it('search prefill with missing macros flags fields but allows saving as zero', async () => {
     const prefill: FoodSearchResult = {
       id: 'off-1',
       name: 'Mystery Snack',
@@ -162,14 +203,7 @@ describe('App (spec scenario walkthrough)', () => {
     expect(within(form).getByLabelText(/Calories/)).toHaveValue('200');
     expect(within(form).getByLabelText(/Carbs/)).toHaveValue('');
 
-    // Saving with blanks is rejected
-    fireEvent.click(within(form).getByText('Add to log'));
-    expect(await within(form).findAllByText(/Enter a number of 0 or more/)).toHaveLength(3);
-
-    // Filling them in allows the save
-    fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '20' } });
-    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '3' } });
-    fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '12' } });
+    // Saving with the optional macros left blank succeeds, defaulting them to 0
     fireEvent.click(within(form).getByText('Add to log'));
 
     expect(await screen.findByText('Mystery Snack')).toBeInTheDocument();
@@ -218,6 +252,7 @@ describe('App (backend failure handling)', () => {
   });
 
   it('surfaces a failed delete and keeps the entry in the log', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const repo = new FakeRepository();
     renderApp(repo);
     await addFood('Snacks', { name: 'Chips', calories: '150', carbs: '15', protein: '2', fat: '9' });

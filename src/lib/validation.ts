@@ -18,7 +18,7 @@ export interface ParsedEntryValues {
   fat: number;
 }
 
-const NUTRIENT_FIELDS = ['calories', 'carbs', 'protein', 'fat'] as const;
+const OPTIONAL_NUTRIENT_FIELDS = ['carbs', 'protein', 'fat'] as const;
 
 /** Strict non-negative number parse; rejects '', '12abc', negatives, NaN. */
 function parseNonNegative(raw: string): number | null {
@@ -27,6 +27,13 @@ function parseNonNegative(raw: string): number | null {
   const n = Number(trimmed);
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
+}
+
+/** Like parseNonNegative, but blank input defaults to 0 instead of erroring. */
+function parseOptionalNonNegative(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return 0;
+  return parseNonNegative(raw);
 }
 
 export function validateEntryForm(
@@ -42,9 +49,12 @@ export function validateEntryForm(
     errors.quantity = 'Quantity must be a number greater than 0';
   }
 
+  const calories = parseNonNegative(values.calories);
+  if (calories === null) errors.calories = 'Enter a number of 0 or more';
+
   const nutrients: Partial<ParsedEntryValues> = {};
-  for (const field of NUTRIENT_FIELDS) {
-    const parsed = parseNonNegative(values[field]);
+  for (const field of OPTIONAL_NUTRIENT_FIELDS) {
+    const parsed = parseOptionalNonNegative(values[field]);
     if (parsed === null) {
       errors[field] = 'Enter a number of 0 or more';
     } else {
@@ -59,7 +69,7 @@ export function validateEntryForm(
     parsed: {
       name,
       quantity: quantity as number,
-      calories: nutrients.calories as number,
+      calories: calories as number,
       carbs: nutrients.carbs as number,
       protein: nutrients.protein as number,
       fat: nutrients.fat as number,
