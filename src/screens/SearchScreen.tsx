@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { searchFoods } from '../api/openFoodFacts';
-import type { FoodSearchResult } from '../types';
+import type { FoodSearchResult, Meal } from '../types';
 
 type SearchState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'done'; results: FoodSearchResult[] };
+
+/** Present when opened from the add-entry form's "search online" action */
+interface FromFormState {
+  fromForm?: { meal: Meal; date: string; query?: string };
+}
 
 const DEBOUNCE_MS = 400;
 
@@ -16,7 +21,9 @@ function fmt(n: number | undefined, unit: string): string {
 }
 
 export function SearchScreen() {
-  const [query, setQuery] = useState('');
+  const location = useLocation();
+  const fromForm = (location.state as FromFormState | null)?.fromForm;
+  const [query, setQuery] = useState(fromForm?.query ?? '');
   const [state, setState] = useState<SearchState>({ kind: 'idle' });
   const navigate = useNavigate();
   const abortRef = useRef<AbortController | null>(null);
@@ -50,8 +57,9 @@ export function SearchScreen() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Returning to an in-progress form restores its selected meal
   function select(result: FoodSearchResult) {
-    navigate('/', { state: { prefill: result } });
+    navigate('/', { state: { prefill: result, meal: fromForm?.meal } });
   }
 
   return (
@@ -69,7 +77,7 @@ export function SearchScreen() {
       {state.kind === 'idle' && (
         <p className="search-hint">
           Type at least 2 characters to search, or{' '}
-          <Link to="/" state={{ openManual: true }}>
+          <Link to="/" state={{ openManual: true, meal: fromForm?.meal }}>
             add a food manually
           </Link>
           .
@@ -83,7 +91,7 @@ export function SearchScreen() {
           <p>Food search is unavailable right now ({state.message}).</p>
           <p>
             You can still{' '}
-            <Link to="/" state={{ openManual: true }}>
+            <Link to="/" state={{ openManual: true, meal: fromForm?.meal }}>
               add a food manually
             </Link>
             .
@@ -96,7 +104,7 @@ export function SearchScreen() {
           <p>No results for “{query.trim()}”.</p>
           <p>
             Try another term, or{' '}
-            <Link to="/" state={{ openManual: true }}>
+            <Link to="/" state={{ openManual: true, meal: fromForm?.meal }}>
               add it manually
             </Link>
             .

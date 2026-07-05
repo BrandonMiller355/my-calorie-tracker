@@ -1,4 +1,4 @@
-import type { FoodEntry, Goals } from '../types';
+import type { FoodEntry, Goals, LibraryFood, Meal, MealSuggestions } from '../types';
 
 /**
  * All persistence goes through this interface. UI code must never touch
@@ -19,4 +19,12 @@ export interface StorageRepository {
   saveGoalsForDate(date: string, goals: Goals): Promise<void>;
   /** Removes the override so the date falls back to the default. */
   clearGoalsForDate(date: string): Promise<void>;
+  /** The user's full food library, excluding archived foods. */
+  getFoods(): Promise<LibraryFood[]>;
+  addFood(food: LibraryFood): Promise<void>;
+  updateFood(food: LibraryFood): Promise<void>;
+  /** Hides the food from suggestions and search; never deletes the row. */
+  archiveFood(id: string): Promise<void>;
+  /** Recent and most-used foods for a meal, computed server-side. */
+  getMealSuggestions(meal: Meal): Promise<MealSuggestions>;
 }

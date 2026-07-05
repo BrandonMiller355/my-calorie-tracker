@@ -1,8 +1,19 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { checkMacroCalories } from '../lib/macroCheck';
+import { findFoodByName, matchFoods } from '../lib/foodMatch';
 import { validateEntryForm, type EntryFormErrors, type EntryFormValues } from '../lib/validation';
 import { useAppState } from '../state/AppState';
-import { MEALS, MEAL_LABELS, type FoodEntry, type FoodSearchResult, type Meal } from '../types';
+import {
+  MEALS,
+  MEAL_LABELS,
+  type FoodEntry,
+  type FoodSearchResult,
+  type LibraryFood,
+  type Meal,
+  type MealSuggestions,
+} from '../types';
+import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
 
 export interface EntryFormProps {
   date: string;
@@ -27,7 +38,9 @@ const NUTRIENT_FIELDS = [
 ] as const;
 
 export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: EntryFormProps) {
-  const { addEntry, updateEntry } = useAppState();
+  const { addEntry, updateEntry, foods, getMealSuggestions } = useAppState();
+  const navigate = useNavigate();
+  const nameInputId = useId();
 
   const [meal, setMeal] = useState<Meal>(editing?.meal ?? defaultMeal ?? 'snacks');
   const [values, setValues] = useState<EntryFormValues>({
@@ -41,8 +54,30 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const [errors, setErrors] = useState<EntryFormErrors>({});
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  /** Library food this entry is linked to (selected or carried from the edited entry) */
+  const [foodId, setFoodId] = useState<string | undefined>(editing?.foodId);
+  const [servingDesc, setServingDesc] = useState<string | undefined>(
+    editing?.servingDesc ?? prefill?.servingDesc,
+  );
+  /** Seeds the library food when this entry is captured as a new food */
+  const [description, setDescription] = useState('');
+  const [suggestions, setSuggestions] = useState<MealSuggestions | null>(null);
 
-  const servingDesc = editing?.servingDesc ?? prefill?.servingDesc;
+  useEffect(() => {
+    let cancelled = false;
+    getMealSuggestions(meal).then(
+      (s) => {
+        if (!cancelled) setSuggestions(s);
+      },
+      // Suggestions are a convenience; the form works fine without them
+      () => {
+        if (!cancelled) setSuggestions(null);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [meal, getMealSuggestions]);
 
   // Search results can lack nutrients; those fields start blank and are flagged
   const missingFromSearch = new Set(
@@ -53,6 +88,57 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
 
   function setField(key: keyof EntryFormValues, value: string) {
     setValues((v) => ({ ...v, [key]: value }));
+  }
+
+  const query = values.name.trim();
+
+  /** The library food this entry would link to on save */
+  const matchedFood = foodId
+    ? foods.find((f) => f.id === foodId)
+    : findFoodByName(foods, values.name);
+
+  // While saving, keep the dropdown empty so the just-captured food doesn't
+  // flash in as a new option under the closing form.
+  let groups: ComboboxGroup[] = [];
+  if (!saving && query === '' && suggestions) {
+    groups = [
+      { label: `Recent · ${MEAL_LABELS[meal]}`, foods: suggestions.recent },
+      { label: `Most used · ${MEAL_LABELS[meal]}`, foods: suggestions.mostUsed },
+    ];
+  } else if (!saving && query !== '') {
+    groups = [{ label: 'My foods', foods: matchFoods(foods, query) }];
+  }
+
+  const actions: ComboboxAction[] =
+    saving || query === ''
+      ? []
+      : [
+          {
+            id: 'search-online',
+            label: `Search online for “${query}”`,
+            onSelect: () =>
+              navigate('/search', { state: { fromForm: { meal, date, query } } }),
+          },
+          {
+            id: 'use-as-new',
+            // Closing the dropdown is all this needs: free text already is the manual path
+            label: `Use “${query}” as a new food`,
+            onSelect: () => {},
+          },
+        ];
+
+  function selectFood(food: LibraryFood) {
+    setFoodId(food.id);
+    setServingDesc(food.servingDesc);
+    setDescription('');
+    setValues((v) => ({
+      ...v,
+      name: food.name,
+      calories: String(food.calories),
+      carbs: String(food.carbs),
+      protein: String(food.protein),
+      fat: String(food.fat),
+    }));
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -83,7 +169,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     setSaveFailed(false);
     try {
       if (editing) {
-        await updateEntry({ ...editing, ...result.parsed, meal });
+        await updateEntry({ ...editing, ...result.parsed, meal, servingDesc, foodId });
       } else {
         await addEntry({
           ...result.parsed,
@@ -91,6 +177,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           meal,
           servingDesc,
           source: prefill ? 'search' : 'manual',
+          foodId,
+          description: description.trim() || undefined,
         });
       }
       onClose();
@@ -118,15 +206,37 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           </p>
         )}
 
-        <label>
-          Name
-          <input
+        {/* label references the input by id: the popup listbox must not sit
+            inside the <label>, or its options become part of the field's name */}
+        <div className="field">
+          <label htmlFor={nameInputId}>Name</label>
+          <FoodNameCombobox
+            inputId={nameInputId}
             value={values.name}
-            onChange={(e) => setField('name', e.target.value)}
-            autoFocus
+            onChange={(name) => {
+              setField('name', name);
+              setFoodId(undefined);
+            }}
+            groups={groups}
+            actions={actions}
+            onSelectFood={selectFood}
           />
           {errors.name && <span className="field-error">{errors.name}</span>}
-        </label>
+          {matchedFood?.description && (
+            <span className="combobox-selected-desc">{matchedFood.description}</span>
+          )}
+        </div>
+
+        {!editing && !matchedFood && (
+          <label>
+            Description (optional)
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brand, prep, weights — saved to your food library"
+            />
+          </label>
+        )}
 
         <label>
           Meal

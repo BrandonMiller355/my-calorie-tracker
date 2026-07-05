@@ -9,8 +9,16 @@ import {
   type ReactNode,
 } from 'react';
 import { todayKey } from '../lib/date';
+import { findFoodByName } from '../lib/foodMatch';
 import type { StorageRepository } from '../storage';
-import { DEFAULT_GOALS, type FoodEntry, type Goals } from '../types';
+import {
+  DEFAULT_GOALS,
+  type FoodEntry,
+  type Goals,
+  type LibraryFood,
+  type Meal,
+  type MealSuggestions,
+} from '../types';
 
 interface AppState {
   date: string;
@@ -21,6 +29,8 @@ interface AppState {
   goalsAreDefault: boolean;
   /** override for `date`; null when this day uses defaultGoals */
   dayGoalOverride: Goals | null;
+  /** Non-archived food library, loaded once per session */
+  foods: LibraryFood[];
   /** true when loading entries or goals from the backend failed */
   loadFailed: boolean;
 }
@@ -36,6 +46,10 @@ type Action =
   | { type: 'day-goal-loaded'; date: string; goals: Goals | null }
   | { type: 'day-goal-saved'; goals: Goals }
   | { type: 'day-goal-cleared' }
+  | { type: 'foods-loaded'; foods: LibraryFood[] }
+  | { type: 'food-added'; food: LibraryFood }
+  | { type: 'food-updated'; food: LibraryFood }
+  | { type: 'food-archived'; id: string }
   | { type: 'load-failed' }
   | { type: 'retry-load' };
 
@@ -72,12 +86,29 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, dayGoalOverride: action.goals };
     case 'day-goal-cleared':
       return { ...state, dayGoalOverride: null };
+    case 'foods-loaded':
+      return { ...state, foods: action.foods };
+    case 'food-added':
+      return { ...state, foods: [...state.foods, action.food] };
+    case 'food-updated':
+      return {
+        ...state,
+        foods: state.foods.map((f) => (f.id === action.food.id ? action.food : f)),
+      };
+    case 'food-archived':
+      return { ...state, foods: state.foods.filter((f) => f.id !== action.id) };
     case 'load-failed':
       return { ...state, loadFailed: true, entriesLoading: false };
     case 'retry-load':
       return { ...state, loadFailed: false, entriesLoading: true };
   }
 }
+
+/**
+ * addEntry input: `description` is not stored on the entry — it seeds the
+ * library food when the entry is auto-captured as a new food.
+ */
+export type NewEntryInput = Omit<FoodEntry, 'id'> & { description?: string };
 
 export interface AppContextValue extends AppState {
   /** Effective goals for `date`: dayGoalOverride if set, else defaultGoals */
@@ -87,7 +118,7 @@ export interface AppContextValue extends AppState {
   setDate: (date: string) => void;
   /** Re-runs the failed goal/entry loads after loadFailed */
   retryLoad: () => void;
-  addEntry: (entry: Omit<FoodEntry, 'id'>) => Promise<void>;
+  addEntry: (entry: NewEntryInput) => Promise<void>;
   updateEntry: (entry: FoodEntry) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
   saveDefaultGoals: (goals: Goals) => Promise<void>;
@@ -95,6 +126,10 @@ export interface AppContextValue extends AppState {
   saveDayGoals: (goals: Goals) => Promise<void>;
   /** Removes the current date's override, reverting it to defaultGoals. */
   clearDayGoals: () => Promise<void>;
+  addFood: (food: Omit<LibraryFood, 'id'>) => Promise<void>;
+  updateFood: (food: LibraryFood) => Promise<void>;
+  archiveFood: (id: string) => Promise<void>;
+  getMealSuggestions: (meal: Meal) => Promise<MealSuggestions>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -113,6 +148,7 @@ export function AppProvider({
     defaultGoals: DEFAULT_GOALS,
     goalsAreDefault: true,
     dayGoalOverride: null,
+    foods: [],
     loadFailed: false,
   });
   const [reloadKey, setReloadKey] = useState(0);
@@ -162,6 +198,21 @@ export function AppProvider({
     };
   }, [repository, state.date, reloadKey]);
 
+  // The food library only powers suggestions and auto-capture, so unlike
+  // entries/goals a failed load degrades silently instead of blocking the app.
+  useEffect(() => {
+    let cancelled = false;
+    repository.getFoods().then(
+      (foods) => {
+        if (!cancelled) dispatch({ type: 'foods-loaded', foods });
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [repository, reloadKey]);
+
   const setDate = useCallback((date: string) => dispatch({ type: 'set-date', date }), []);
 
   const retryLoad = useCallback(() => {
@@ -170,12 +221,42 @@ export function AppProvider({
   }, []);
 
   const addEntry = useCallback(
-    async (input: Omit<FoodEntry, 'id'>) => {
-      const entry: FoodEntry = { ...input, id: crypto.randomUUID() };
+    async (input: NewEntryInput) => {
+      const { description, ...entryInput } = input;
+      // Auto-capture: link to the library food, capturing a new one when the
+      // name is unknown. Existing foods are never updated from the log form,
+      // and a capture failure must not block the entry save.
+      let foodId = entryInput.foodId;
+      if (foodId === undefined) {
+        const existing = findFoodByName(state.foods, entryInput.name);
+        if (existing) {
+          foodId = existing.id;
+        } else {
+          const food: LibraryFood = {
+            id: crypto.randomUUID(),
+            name: entryInput.name,
+            description: description?.trim() || undefined,
+            servingDesc: entryInput.servingDesc,
+            calories: entryInput.calories,
+            carbs: entryInput.carbs,
+            protein: entryInput.protein,
+            fat: entryInput.fat,
+            source: entryInput.source,
+          };
+          try {
+            await repository.addFood(food);
+            dispatch({ type: 'food-added', food });
+            foodId = food.id;
+          } catch {
+            // Best-effort: save the entry unlinked; a later log can capture it.
+          }
+        }
+      }
+      const entry: FoodEntry = { ...entryInput, foodId, id: crypto.randomUUID() };
       await repository.addEntry(entry);
       dispatch({ type: 'entry-added', entry });
     },
-    [repository],
+    [repository, state.foods],
   );
 
   const updateEntry = useCallback(
@@ -215,6 +296,36 @@ export function AppProvider({
     dispatch({ type: 'day-goal-cleared' });
   }, [repository, state.date]);
 
+  const addFood = useCallback(
+    async (input: Omit<LibraryFood, 'id'>) => {
+      const food: LibraryFood = { ...input, id: crypto.randomUUID() };
+      await repository.addFood(food);
+      dispatch({ type: 'food-added', food });
+    },
+    [repository],
+  );
+
+  const updateFood = useCallback(
+    async (food: LibraryFood) => {
+      await repository.updateFood(food);
+      dispatch({ type: 'food-updated', food });
+    },
+    [repository],
+  );
+
+  const archiveFood = useCallback(
+    async (id: string) => {
+      await repository.archiveFood(id);
+      dispatch({ type: 'food-archived', id });
+    },
+    [repository],
+  );
+
+  const getMealSuggestions = useCallback(
+    (meal: Meal) => repository.getMealSuggestions(meal),
+    [repository],
+  );
+
   const goals = state.dayGoalOverride ?? state.defaultGoals;
   const dayGoalIsOverridden = state.dayGoalOverride !== null;
 
@@ -231,6 +342,10 @@ export function AppProvider({
       saveDefaultGoals,
       saveDayGoals,
       clearDayGoals,
+      addFood,
+      updateFood,
+      archiveFood,
+      getMealSuggestions,
     }),
     [
       state,
@@ -244,6 +359,10 @@ export function AppProvider({
       saveDefaultGoals,
       saveDayGoals,
       clearDayGoals,
+      addFood,
+      updateFood,
+      archiveFood,
+      getMealSuggestions,
     ],
   );
 

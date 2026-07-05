@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { DayLogScreen } from './screens/DayLogScreen';
+import { FoodsScreen } from './screens/FoodsScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { AppProvider } from './state/AppState';
@@ -13,6 +14,7 @@ export default function App({ repository }: { repository: StorageRepository }) {
           <Routes>
             <Route path="/" element={<DayLogScreen />} />
             <Route path="/search" element={<SearchScreen />} />
+            <Route path="/foods" element={<FoodsScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
           </Routes>
         </main>
@@ -21,6 +23,7 @@ export default function App({ repository }: { repository: StorageRepository }) {
             Log
           </NavLink>
           <NavLink to="/search">Search</NavLink>
+          <NavLink to="/foods">Foods</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
       </div>

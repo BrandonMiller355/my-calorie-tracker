@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseRepository } from './SupabaseRepository';
-import type { FoodEntry, Goals } from '../types';
+import type { FoodEntry, Goals, LibraryFood } from '../types';
 
 interface Call {
   method: string;
@@ -19,7 +19,7 @@ interface FakeResult {
 function fakeClient(result: FakeResult = {}) {
   const calls: Call[] = [];
   const builder: Record<string, unknown> = {};
-  for (const method of ['select', 'insert', 'update', 'delete', 'upsert', 'eq', 'maybeSingle']) {
+  for (const method of ['select', 'insert', 'update', 'delete', 'upsert', 'eq', 'is', 'maybeSingle']) {
     builder[method] = (...args: unknown[]) => {
       calls.push({ method, args });
       return builder;
@@ -33,6 +33,10 @@ function fakeClient(result: FakeResult = {}) {
   const client = {
     from: (table: string) => {
       calls.push({ method: 'from', args: [table] });
+      return builder;
+    },
+    rpc: (fn: string, params: unknown) => {
+      calls.push({ method: 'rpc', args: [fn, params] });
       return builder;
     },
   };
@@ -65,6 +69,31 @@ const entryRow = {
   protein: 10,
   fat: 5,
   source: 'search',
+  food_id: null,
+};
+
+const food: LibraryFood = {
+  id: 'food-1',
+  name: 'PB&J',
+  description: '15g jelly, 16g pbfit, 2 sara lee slices',
+  servingDesc: '1 sandwich',
+  calories: 380,
+  carbs: 45,
+  protein: 14,
+  fat: 12,
+  source: 'manual',
+};
+
+const foodRow = {
+  id: 'food-1',
+  name: 'PB&J',
+  description: '15g jelly, 16g pbfit, 2 sara lee slices',
+  serving_desc: '1 sandwich',
+  calories: 380,
+  carbs: 45,
+  protein: 14,
+  fat: 12,
+  source: 'manual',
 };
 
 describe('SupabaseRepository', () => {
@@ -183,6 +212,69 @@ describe('SupabaseRepository', () => {
     ]);
   });
 
+  it('getFoods selects non-archived foods and maps snake_case rows', async () => {
+    const { client, calls } = fakeClient({ data: [foodRow] });
+    const foods = await new SupabaseRepository(client).getFoods();
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['foods'] },
+      { method: 'select', args: ['*'] },
+      { method: 'is', args: ['archived_at', null] },
+    ]);
+    expect(foods).toEqual([food]);
+  });
+
+  it('addFood inserts a snake_case row, mapping missing optionals to null', async () => {
+    const { client, calls } = fakeClient();
+    const { description: _d, servingDesc: _s, ...bare } = food;
+    await new SupabaseRepository(client).addFood(bare);
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['foods'] },
+      { method: 'insert', args: [{ ...foodRow, description: null, serving_desc: null }] },
+    ]);
+  });
+
+  it('updateFood updates by id without repeating id in the payload', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).updateFood(food);
+
+    const { id: _id, ...rowWithoutId } = foodRow;
+    expect(calls).toEqual([
+      { method: 'from', args: ['foods'] },
+      { method: 'update', args: [rowWithoutId] },
+      { method: 'eq', args: ['id', 'food-1'] },
+    ]);
+  });
+
+  it('archiveFood stamps archived_at instead of deleting', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).archiveFood('food-1');
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['foods'] },
+      { method: 'update', args: [{ archived_at: expect.any(String) }] },
+      { method: 'eq', args: ['id', 'food-1'] },
+    ]);
+  });
+
+  it('getMealSuggestions calls the meal_suggestions function and splits the groups', async () => {
+    const other = { ...foodRow, id: 'food-2', name: 'Oatmeal' };
+    const { client, calls } = fakeClient({
+      data: [
+        { ...foodRow, suggestion_group: 'recent' },
+        { ...other, suggestion_group: 'most_used' },
+      ],
+    });
+    const suggestions = await new SupabaseRepository(client).getMealSuggestions('breakfast');
+
+    expect(calls).toEqual([{ method: 'rpc', args: ['meal_suggestions', { p_meal: 'breakfast' }] }]);
+    expect(suggestions).toEqual({
+      recent: [food],
+      mostUsed: [{ ...food, id: 'food-2', name: 'Oatmeal' }],
+    });
+  });
+
   it.each([
     ['getEntriesByDate', (r: SupabaseRepository) => r.getEntriesByDate('2026-07-05')],
     ['addEntry', (r: SupabaseRepository) => r.addEntry(entry)],
@@ -200,6 +292,11 @@ describe('SupabaseRepository', () => {
         r.saveGoalsForDate('2026-07-05', { calories: 1, carbs: 1, protein: 1, fat: 1 }),
     ],
     ['clearGoalsForDate', (r: SupabaseRepository) => r.clearGoalsForDate('2026-07-05')],
+    ['getFoods', (r: SupabaseRepository) => r.getFoods()],
+    ['addFood', (r: SupabaseRepository) => r.addFood(food)],
+    ['updateFood', (r: SupabaseRepository) => r.updateFood(food)],
+    ['archiveFood', (r: SupabaseRepository) => r.archiveFood('food-1')],
+    ['getMealSuggestions', (r: SupabaseRepository) => r.getMealSuggestions('breakfast')],
   ])('%s throws when Supabase returns an error', async (_name, run) => {
     const { client } = fakeClient({ error: { message: 'permission denied' } });
     await expect(run(new SupabaseRepository(client))).rejects.toThrow(/permission denied/);

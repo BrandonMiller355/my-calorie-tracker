@@ -4,7 +4,7 @@ import { AppProvider } from '../state/AppState';
 import { AuthProvider } from '../state/AuthProvider';
 import { ThemeProvider } from '../state/ThemeProvider';
 import type { StorageRepository } from '../storage';
-import type { FoodEntry, Goals } from '../types';
+import type { FoodEntry, Goals, LibraryFood, MealSuggestions } from '../types';
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
@@ -32,6 +32,15 @@ class FakeRepository implements StorageRepository {
   }
   async saveGoalsForDate(): Promise<void> {}
   async clearGoalsForDate(): Promise<void> {}
+  async getFoods(): Promise<LibraryFood[]> {
+    return [];
+  }
+  async addFood(): Promise<void> {}
+  async updateFood(): Promise<void> {}
+  async archiveFood(): Promise<void> {}
+  async getMealSuggestions(): Promise<MealSuggestions> {
+    return { recent: [], mostUsed: [] };
+  }
 }
 
 function renderSettings() {

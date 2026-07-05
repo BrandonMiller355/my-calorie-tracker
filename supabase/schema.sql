@@ -72,3 +72,96 @@ create policy "own daily goals update" on daily_goals
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own daily goals delete" on daily_goals
   for delete using (user_id = auth.uid());
+
+-- Personal food library. One row per distinct food name per user; entries
+-- reference these for provenance but keep their own copies of nutrition
+-- values, so editing a food never rewrites logged history.
+create table foods (
+  id uuid primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null,
+  -- Brand, prep notes, weights, e.g. "15g jelly, 16g pbfit, 2 sara lee slices"
+  description text,
+  serving_desc text,
+  -- Per single serving
+  calories numeric not null,
+  carbs numeric not null,
+  protein numeric not null,
+  fat numeric not null,
+  source text not null check (source in ('manual', 'search')),
+  created_at timestamptz not null default now(),
+  -- Archived foods are hidden from suggestions and search but never deleted,
+  -- so old entries keep a valid reference.
+  archived_at timestamptz
+);
+
+-- The dedup key: logging the same name twice resolves to one library row,
+-- and makes any future import idempotent.
+create unique index foods_user_name on foods (user_id, lower(trim(name)));
+
+alter table food_entries add column food_id uuid references foods (id);
+
+alter table foods enable row level security;
+
+create policy "own foods select" on foods
+  for select using (user_id = auth.uid());
+create policy "own foods insert" on foods
+  for insert with check (user_id = auth.uid());
+create policy "own foods update" on foods
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own foods delete" on foods
+  for delete using (user_id = auth.uid());
+
+-- Name-field suggestions: up to 3 foods most recently logged for the meal,
+-- then up to 3 most often logged for it, deduped across the two groups and
+-- excluding archived foods. security invoker (the default), so RLS on both
+-- tables scopes everything to the calling user. `date` is YYYY-MM-DD text,
+-- which sorts correctly lexicographically.
+create function meal_suggestions(p_meal text)
+returns table (
+  id uuid,
+  name text,
+  description text,
+  serving_desc text,
+  calories numeric,
+  carbs numeric,
+  protein numeric,
+  fat numeric,
+  source text,
+  suggestion_group text
+)
+language sql
+stable
+as $$
+  with meal_foods as (
+    select e.food_id, max(e.date) as last_date, count(*) as times_logged
+    from food_entries e
+    join foods f on f.id = e.food_id
+    where e.meal = p_meal and f.archived_at is null
+    group by e.food_id
+  ),
+  recent as (
+    select food_id, row_number() over (order by last_date desc) as ord
+    from meal_foods
+    order by last_date desc
+    limit 3
+  ),
+  most_used as (
+    select food_id,
+      row_number() over (order by times_logged desc, last_date desc) as ord
+    from meal_foods
+    where food_id not in (select food_id from recent)
+    order by times_logged desc, last_date desc
+    limit 3
+  ),
+  ranked as (
+    select food_id, 'recent' as suggestion_group, ord from recent
+    union all
+    select food_id, 'most_used' as suggestion_group, ord from most_used
+  )
+  select f.id, f.name, f.description, f.serving_desc,
+    f.calories, f.carbs, f.protein, f.fat, f.source, r.suggestion_group
+  from ranked r
+  join foods f on f.id = r.food_id
+  order by case r.suggestion_group when 'recent' then 0 else 1 end, r.ord;
+$$;

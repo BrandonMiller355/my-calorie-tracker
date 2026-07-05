@@ -1,9 +1,6 @@
-# food-logging Specification
+# food-logging Specification (delta)
 
-## Purpose
-TBD - created by syncing change add-calorie-tracker. Update Purpose after review.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Log a food entry
 The system SHALL allow the user to add a food entry to a specific day and meal (breakfast, lunch, dinner, or snacks). Each entry MUST record a name, calories, carbs (g), protein (g), and fat (g), and MAY record a serving description, quantity, and a reference to the library food it came from. The name field SHALL be a combobox backed by the user's food library: it suggests per-meal foods when empty, matches library foods as the user types, and offers online search and manual entry as fallback actions. Entries MUST store their own copies of nutrition values regardless of how the name was chosen.
@@ -23,24 +20,3 @@ The system SHALL allow the user to add a food entry to a specific day and meal (
 #### Scenario: Reject invalid nutrition values
 - **WHEN** the user submits an entry with a negative or non-numeric value for calories or any macro
 - **THEN** the system rejects the submission and shows a validation message without saving
-
-### Requirement: Edit a food entry
-The system SHALL allow the user to edit any field of an existing entry, including moving it to a different meal.
-
-#### Scenario: Update entry values
-- **WHEN** the user edits an entry's calories and saves
-- **THEN** the entry and the day's totals reflect the new value immediately
-
-### Requirement: Delete a food entry
-The system SHALL allow the user to delete an entry.
-
-#### Scenario: Delete entry
-- **WHEN** the user deletes an entry
-- **THEN** it is removed from the meal list and the day's totals update immediately
-
-### Requirement: Entries grouped by meal
-The system SHALL display a day's entries grouped under breakfast, lunch, dinner, and snacks, with a per-meal calorie subtotal.
-
-#### Scenario: View day log
-- **WHEN** the user views a day that has entries in multiple meals
-- **THEN** each entry is listed under its meal and each meal shows its calorie subtotal

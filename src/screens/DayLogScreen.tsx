@@ -12,12 +12,14 @@ import { MEALS, type FoodEntry, type FoodSearchResult, type Meal } from '../type
 type FormMode =
   | { kind: 'add'; meal: Meal }
   | { kind: 'edit'; entry: FoodEntry }
-  | { kind: 'prefill'; prefill: FoodSearchResult }
+  | { kind: 'prefill'; prefill: FoodSearchResult; meal?: Meal }
   | null;
 
 interface LocationState {
   prefill?: FoodSearchResult;
   openManual?: boolean;
+  /** Meal the add-entry form had selected before escalating to online search */
+  meal?: Meal;
 }
 
 export function DayLogScreen() {
@@ -44,10 +46,10 @@ export function DayLogScreen() {
   useEffect(() => {
     const state = location.state as LocationState | null;
     if (state?.prefill) {
-      setForm({ kind: 'prefill', prefill: state.prefill });
+      setForm({ kind: 'prefill', prefill: state.prefill, meal: state.meal });
       navigate(location.pathname, { replace: true, state: null });
     } else if (state?.openManual) {
-      setForm({ kind: 'add', meal: 'snacks' });
+      setForm({ kind: 'add', meal: state.meal ?? 'snacks' });
       navigate(location.pathname, { replace: true, state: null });
     }
   }, [location.state, location.pathname, navigate]);
@@ -110,7 +112,7 @@ export function DayLogScreen() {
           date={date}
           editing={form.kind === 'edit' ? form.entry : undefined}
           prefill={form.kind === 'prefill' ? form.prefill : undefined}
-          defaultMeal={form.kind === 'add' ? form.meal : undefined}
+          defaultMeal={form.kind === 'add' || form.kind === 'prefill' ? form.meal : undefined}
           onClose={() => setForm(null)}
         />
       )}

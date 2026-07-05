@@ -1,8 +1,18 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
+import { searchFoods } from './api/openFoodFacts';
 import type { StorageRepository } from './storage';
-import type { FoodEntry, FoodSearchResult, Goals } from './types';
+import type {
+  FoodEntry,
+  FoodSearchResult,
+  Goals,
+  LibraryFood,
+  Meal,
+  MealSuggestions,
+} from './types';
+
+vi.mock('./api/openFoodFacts', () => ({ searchFoods: vi.fn(async () => []) }));
 
 type RouterEntry = string | { pathname: string; state: unknown };
 
@@ -11,6 +21,7 @@ class FakeRepository implements StorageRepository {
   private entries = new Map<string, FoodEntry>();
   private defaultGoals: Goals | null = null;
   private dayGoals = new Map<string, Goals>();
+  private foods = new Map<string, LibraryFood>();
   failReads = false;
   failWrites = false;
 
@@ -57,6 +68,55 @@ class FakeRepository implements StorageRepository {
   async clearGoalsForDate(date: string): Promise<void> {
     this.assertWrites();
     this.dayGoals.delete(date);
+  }
+  async getFoods(): Promise<LibraryFood[]> {
+    this.assertReads();
+    return [...this.foods.values()].filter((f) => !f.archivedAt).map((f) => ({ ...f }));
+  }
+  async addFood(food: LibraryFood): Promise<void> {
+    this.assertWrites();
+    const normalized = food.name.trim().toLowerCase();
+    for (const existing of this.foods.values()) {
+      // Mirrors the unique index on (user_id, lower(trim(name)))
+      if (existing.name.trim().toLowerCase() === normalized) throw new Error('duplicate name');
+    }
+    this.foods.set(food.id, { ...food });
+  }
+  async updateFood(food: LibraryFood): Promise<void> {
+    this.assertWrites();
+    this.foods.set(food.id, { ...food });
+  }
+  async archiveFood(id: string): Promise<void> {
+    this.assertWrites();
+    const food = this.foods.get(id);
+    if (food) this.foods.set(id, { ...food, archivedAt: new Date().toISOString() });
+  }
+  // Mirrors the meal_suggestions() SQL: per-meal grouping, 3 recent then
+  // 3 most used, deduped, archived foods excluded.
+  async getMealSuggestions(meal: Meal): Promise<MealSuggestions> {
+    this.assertReads();
+    const byFood = new Map<string, { lastDate: string; count: number }>();
+    for (const e of this.entries.values()) {
+      if (e.meal !== meal || !e.foodId) continue;
+      const food = this.foods.get(e.foodId);
+      if (!food || food.archivedAt) continue;
+      const agg = byFood.get(e.foodId) ?? { lastDate: '', count: 0 };
+      agg.count += 1;
+      if (e.date > agg.lastDate) agg.lastDate = e.date;
+      byFood.set(e.foodId, agg);
+    }
+    const stats = [...byFood.entries()];
+    const recent = stats
+      .sort((a, b) => b[1].lastDate.localeCompare(a[1].lastDate))
+      .slice(0, 3)
+      .map(([id]) => id);
+    const mostUsed = stats
+      .filter(([id]) => !recent.includes(id))
+      .sort((a, b) => b[1].count - a[1].count || b[1].lastDate.localeCompare(a[1].lastDate))
+      .slice(0, 3)
+      .map(([id]) => id);
+    const toFood = (id: string) => ({ ...this.foods.get(id)! });
+    return { recent: recent.map(toFood), mostUsed: mostUsed.map(toFood) };
   }
 }
 
@@ -237,6 +297,240 @@ describe('App (spec scenario walkthrough)', () => {
 
     expect(await screen.findByText('Mystery Snack')).toBeInTheDocument();
     expect(screen.getByText('1800 kcal left')).toBeInTheDocument();
+  });
+});
+
+describe('Food library (auto-capture, suggestions, combobox)', () => {
+  it('auto-captures a logged food and suggests it for that meal only', async () => {
+    renderApp(new FakeRepository());
+    await addFood('Breakfast', {
+      name: 'Greek yogurt',
+      calories: '120',
+      carbs: '8',
+      protein: '15',
+      fat: '4',
+    });
+    await addFood('Dinner', { name: 'Pasta', calories: '600', carbs: '80', protein: '20', fat: '15' });
+
+    const breakfast = screen.getByRole('region', { name: 'Breakfast' });
+    fireEvent.click(within(breakfast).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.focus(within(form).getByLabelText('Name'));
+
+    expect(await screen.findByText('Recent · Breakfast')).toBeInTheDocument();
+    const listbox = screen.getByRole('listbox');
+    expect(within(listbox).getByRole('option', { name: /Greek yogurt/ })).toBeInTheDocument();
+    expect(within(listbox).queryByText(/Pasta/)).toBeNull();
+  });
+
+  it('selecting a suggestion pre-fills nutrition from the library food', async () => {
+    renderApp(new FakeRepository());
+    await addFood('Breakfast', {
+      name: 'Greek yogurt',
+      calories: '120',
+      carbs: '8',
+      protein: '15',
+      fat: '4',
+    });
+
+    const breakfast = screen.getByRole('region', { name: 'Breakfast' });
+    fireEvent.click(within(breakfast).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.focus(within(form).getByLabelText('Name'));
+    fireEvent.click(await screen.findByRole('option', { name: /Greek yogurt/ }));
+
+    expect(within(form).getByLabelText('Name')).toHaveValue('Greek yogurt');
+    expect(within(form).getByLabelText(/Calories/)).toHaveValue('120');
+    expect(within(form).getByLabelText(/Protein/)).toHaveValue('15');
+  });
+
+  it('typing matches saved foods by description, shown as a secondary line', async () => {
+    renderApp(new FakeRepository());
+    const lunch = await screen.findByRole('region', { name: 'Lunch' });
+
+    // Log once with a description; it seeds the captured library food
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'PB&J' } });
+    fireEvent.change(within(form).getByLabelText(/Description/), {
+      target: { value: '16g pbfit, 2 sara lee slices' },
+    });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '380' } });
+    fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '45' } });
+    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '14' } });
+    fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '12' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+
+    // A search on description text finds it
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'pbfit' } });
+
+    const option = await screen.findByRole('option', { name: /PB&J/ });
+    expect(option).toHaveTextContent('16g pbfit, 2 sara lee slices');
+  });
+
+  it('offers search-online and use-as-new actions for unmatched text', async () => {
+    renderApp(new FakeRepository());
+    const lunch = await screen.findByRole('region', { name: 'Lunch' });
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'zzz' } });
+
+    expect(await screen.findByRole('option', { name: /Search online for “zzz”/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Use “zzz” as a new food/ })).toBeInTheDocument();
+
+    // Use-as-new just dismisses the dropdown; free text stays the manual path
+    fireEvent.click(screen.getByRole('option', { name: /Use “zzz” as a new food/ }));
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(within(form).getByLabelText('Name')).toHaveValue('zzz');
+  });
+
+  it('a macro tweak while logging does not overwrite the library food', async () => {
+    renderApp(new FakeRepository());
+    await addFood('Lunch', { name: 'Rice', calories: '200', carbs: '45', protein: '4', fat: '1' });
+
+    // Re-log from the suggestion, tweaking calories for this occasion only
+    const lunch = screen.getByRole('region', { name: 'Lunch' });
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.focus(within(form).getByLabelText('Name'));
+    fireEvent.click(await screen.findByRole('option', { name: /Rice/ }));
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '250' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+
+    // The library still has the canonical 200 kcal
+    fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
+    expect(await screen.findByText(/200 kcal/)).toBeInTheDocument();
+    expect(screen.queryByText(/250 kcal/)).toBeNull();
+  });
+});
+
+describe('Search escalation round trip', () => {
+  const granola: FoodSearchResult = {
+    id: 'off-1',
+    name: 'Granola',
+    servingDesc: '100 g',
+    calories: 450,
+    carbs: 60,
+    protein: 10,
+    fat: 15,
+  };
+
+  it('search online from the form returns with the selected meal preserved', async () => {
+    vi.mocked(searchFoods).mockResolvedValue([granola]);
+    renderApp(new FakeRepository());
+    const lunch = await screen.findByRole('region', { name: 'Lunch' });
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    let form = screen.getByRole('form', { name: 'Add food entry' });
+    expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
+
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'granola' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Search online for “granola”/ }));
+
+    // On the search screen with the query carried over; pick the result
+    expect(await screen.findByPlaceholderText(/Open Food Facts/)).toHaveValue('granola');
+    fireEvent.click(await screen.findByRole('button', { name: /Granola/ }));
+
+    form = await screen.findByRole('form', { name: 'Add food entry' });
+    expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
+    expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
+  });
+
+  it('standalone search still hands off with the default meal', async () => {
+    vi.mocked(searchFoods).mockResolvedValue([granola]);
+    renderApp(new FakeRepository(), ['/search']);
+
+    fireEvent.change(await screen.findByPlaceholderText(/Open Food Facts/), {
+      target: { value: 'granola' },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Granola/ }));
+
+    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
+    expect(within(form).getByLabelText('Meal')).toHaveValue('snacks');
+  });
+});
+
+describe('Food library screen', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('creates a food item directly, available without ever logging it', async () => {
+    renderApp(new FakeRepository(), ['/foods']);
+    fireEvent.click(await screen.findByText('+ Add food item'));
+
+    const form = screen.getByRole('form', { name: 'Add library food' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Protein shake' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '180' } });
+    fireEvent.click(within(form).getByText('Add to library'));
+
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add library food' })).toBeNull());
+    expect(screen.getByText('Protein shake')).toBeInTheDocument();
+    expect(screen.getByText(/180 kcal/)).toBeInTheDocument();
+  });
+
+  it('rejects a duplicate name instead of creating a second food', async () => {
+    renderApp(new FakeRepository(), ['/foods']);
+    fireEvent.click(await screen.findByText('+ Add food item'));
+    let form = screen.getByRole('form', { name: 'Add library food' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Rice' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '200' } });
+    fireEvent.click(within(form).getByText('Add to library'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add library food' })).toBeNull());
+
+    fireEvent.click(screen.getByText('+ Add food item'));
+    form = screen.getByRole('form', { name: 'Add library food' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: ' rice ' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '210' } });
+    fireEvent.click(within(form).getByText('Add to library'));
+
+    expect(
+      await within(form).findByText(/already in your library/),
+    ).toBeInTheDocument();
+  });
+
+  it('editing a library food does not rewrite past entries', async () => {
+    renderApp(new FakeRepository());
+    await addFood('Lunch', { name: 'Rice', calories: '200', carbs: '45', protein: '4', fat: '1' });
+    expect(screen.getByText('1800 kcal left')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
+    fireEvent.click(await screen.findByText('Edit'));
+    const form = screen.getByRole('form', { name: 'Edit library food' });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '210' } });
+    fireEvent.click(within(form).getByText('Save changes'));
+    expect(await screen.findByText(/210 kcal/)).toBeInTheDocument();
+
+    // The logged entry keeps its snapshot
+    fireEvent.click(screen.getByRole('link', { name: 'Log' }));
+    expect(await screen.findByText('1800 kcal left')).toBeInTheDocument();
+  });
+
+  it('archiving hides the food from the library and suggestions but keeps entries', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderApp(new FakeRepository());
+    await addFood('Snacks', { name: 'Chips', calories: '150', carbs: '15', protein: '2', fat: '9' });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
+    fireEvent.click(await screen.findByLabelText('Archive Chips'));
+    await waitFor(() => expect(screen.queryByLabelText('Archive Chips')).toBeNull());
+
+    // Entry and totals untouched; no suggestion offered anymore
+    fireEvent.click(screen.getByRole('link', { name: 'Log' }));
+    expect(await screen.findByText('Chips')).toBeInTheDocument();
+    expect(screen.getByText('1850 kcal left')).toBeInTheDocument();
+
+    const snacks = screen.getByRole('region', { name: 'Snacks' });
+    fireEvent.click(within(snacks).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.focus(within(form).getByLabelText('Name'));
+    // suggestions resolve within a waitFor poll; the archived food never shows
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(screen.queryByRole('option', { name: /Chips/ })).toBeNull();
   });
 });
 

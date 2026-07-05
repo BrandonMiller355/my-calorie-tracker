@@ -398,6 +398,14 @@ body {
   margin: 0;
 }
 
+.entry-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .entry-form label,
 .goals-form label,
 .appearance-section label {
@@ -420,6 +428,93 @@ body {
   padding: 8px 10px;
   font-size: 15px;
   font-weight: 400;
+}
+
+.combobox {
+  position: relative;
+}
+
+.combobox-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.combobox-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.combobox-group-label {
+  display: block;
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.combobox-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 400;
+  font-size: 14px;
+}
+
+.combobox-option:hover,
+.combobox-option.active {
+  background: var(--accent-soft);
+}
+
+.combobox-option-name {
+  font-weight: 600;
+}
+
+.combobox-option-kcal {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.combobox-option-desc,
+.combobox-selected-desc {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.combobox-selected-desc {
+  margin: 2px 0 0;
+}
+
+.combobox-action {
+  color: var(--accent);
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  margin-top: 2px;
+  padding-top: 8px;
+}
+
+.combobox-action:first-child {
+  border-top: none;
 }
 
 .nutrient-grid {
@@ -543,6 +638,66 @@ label.flagged input {
 .result-macros {
   font-size: 13px;
   color: var(--muted);
+}
+
+/* Food library */
+.foods-screen h1 {
+  font-size: 20px;
+}
+
+.add-food-button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--accent-button);
+  color: white;
+  margin: 12px 0;
+}
+
+.food-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.food-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.food-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.food-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.food-row-actions button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 /* Settings */

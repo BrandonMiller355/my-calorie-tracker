@@ -1,0 +1,225 @@
+import { useState, type FormEvent } from 'react';
+import { findFoodByName } from '../lib/foodMatch';
+import {
+  validateFoodForm,
+  type FoodFormErrors,
+  type FoodFormValues,
+} from '../lib/validation';
+import { useAppState } from '../state/AppState';
+import type { LibraryFood } from '../types';
+
+type FormMode = { kind: 'create' } | { kind: 'edit'; food: LibraryFood } | null;
+
+const NUTRIENT_FIELDS = [
+  { key: 'fat', label: 'Fat (g)' },
+  { key: 'carbs', label: 'Carbs (g)' },
+  { key: 'protein', label: 'Protein (g)' },
+] as const;
+
+function toFormValues(food?: LibraryFood): FoodFormValues {
+  return {
+    name: food?.name ?? '',
+    description: food?.description ?? '',
+    servingDesc: food?.servingDesc ?? '',
+    calories: food ? String(food.calories) : '',
+    carbs: food ? String(food.carbs) : '',
+    protein: food ? String(food.protein) : '',
+    fat: food ? String(food.fat) : '',
+  };
+}
+
+function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => void }) {
+  const { foods, addFood, updateFood } = useAppState();
+  const [values, setValues] = useState<FoodFormValues>(toFormValues(editing));
+  const [errors, setErrors] = useState<FoodFormErrors>({});
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+
+  function setField(key: keyof FoodFormValues, value: string) {
+    setValues((v) => ({ ...v, [key]: value }));
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const result = validateFoodForm(values);
+    if (!result.ok) {
+      setErrors(result.errors);
+      return;
+    }
+    const duplicate = findFoodByName(foods, result.parsed.name);
+    if (duplicate && duplicate.id !== editing?.id) {
+      setErrors({ name: 'A food with this name is already in your library' });
+      return;
+    }
+
+    setErrors({});
+    setSaving(true);
+    setSaveFailed(false);
+    try {
+      if (editing) {
+        await updateFood({ ...editing, ...result.parsed });
+      } else {
+        await addFood({ ...result.parsed, source: 'manual' });
+      }
+      onClose();
+    } catch {
+      setSaveFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form
+        className="entry-form"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
+        aria-label={editing ? 'Edit library food' : 'Add library food'}
+      >
+        <h2>{editing ? 'Edit food' : 'Add food item'}</h2>
+
+        <label>
+          Name
+          <input value={values.name} onChange={(e) => setField('name', e.target.value)} autoFocus />
+          {errors.name && <span className="field-error">{errors.name}</span>}
+        </label>
+
+        <label>
+          Description (optional)
+          <input
+            value={values.description}
+            onChange={(e) => setField('description', e.target.value)}
+            placeholder="Brand, prep, weights"
+          />
+        </label>
+
+        <label>
+          Serving description (optional)
+          <input
+            value={values.servingDesc}
+            onChange={(e) => setField('servingDesc', e.target.value)}
+            placeholder="e.g. 1 cup"
+          />
+        </label>
+
+        <label>
+          Calories (kcal)
+          <input
+            inputMode="decimal"
+            value={values.calories}
+            onChange={(e) => setField('calories', e.target.value)}
+          />
+          {errors.calories && <span className="field-error">{errors.calories}</span>}
+        </label>
+
+        <div className="nutrient-grid">
+          {NUTRIENT_FIELDS.map(({ key, label }) => (
+            <label key={key}>
+              {label}
+              <input
+                inputMode="decimal"
+                value={values[key]}
+                onChange={(e) => setField(key, e.target.value)}
+              />
+              {errors[key] && <span className="field-error">{errors[key]}</span>}
+            </label>
+          ))}
+        </div>
+
+        {saveFailed && (
+          <p className="field-error" role="alert">
+            Couldn’t save — your change was not stored. Check your connection and try again.
+          </p>
+        )}
+
+        <div className="form-actions">
+          <button type="button" className="secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" disabled={saving}>
+            {saving ? 'Saving…' : editing ? 'Save changes' : 'Add to library'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export function FoodsScreen() {
+  const { foods, archiveFood } = useAppState();
+  const [form, setForm] = useState<FormMode>(null);
+  const [archiveFailed, setArchiveFailed] = useState(false);
+
+  const sorted = [...foods].sort((a, b) => a.name.localeCompare(b.name));
+
+  function handleArchive(food: LibraryFood) {
+    if (
+      !window.confirm(
+        `Archive “${food.name}”? It disappears from suggestions and search, but entries you’ve already logged keep their values.`,
+      )
+    ) {
+      return;
+    }
+    setArchiveFailed(false);
+    archiveFood(food.id).catch(() => setArchiveFailed(true));
+  }
+
+  return (
+    <div className="foods-screen">
+      <h1>Food library</h1>
+      <p className="form-note">
+        Foods you log are saved here automatically. Edits change future logs only — entries
+        already in your history keep the values they were logged with.
+      </p>
+
+      <button type="button" className="add-food-button" onClick={() => setForm({ kind: 'create' })}>
+        + Add food item
+      </button>
+
+      {archiveFailed && (
+        <p className="error-banner" role="alert">
+          Couldn’t archive the food — it was not removed. Check your connection and try again.
+        </p>
+      )}
+
+      {sorted.length === 0 ? (
+        <p className="search-hint">Nothing here yet — foods appear as you log them.</p>
+      ) : (
+        <ul className="food-list">
+          {sorted.map((food) => (
+            <li key={food.id} className="food-row">
+              <div className="food-row-main">
+                <span className="result-name">{food.name}</span>
+                {food.description && <span className="result-brand">{food.description}</span>}
+                <span className="result-macros">
+                  {food.calories} kcal · F {food.fat} g · C {food.carbs} g · P {food.protein} g
+                  {food.servingDesc ? ` · ${food.servingDesc}` : ''}
+                </span>
+              </div>
+              <div className="food-row-actions">
+                <button type="button" onClick={() => setForm({ kind: 'edit', food })}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Archive ${food.name}`}
+                  onClick={() => handleArchive(food)}
+                >
+                  Archive
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {form && (
+        <FoodForm
+          editing={form.kind === 'edit' ? form.food : undefined}
+          onClose={() => setForm(null)}
+        />
+      )}
+    </div>
+  );
+}

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { FoodEntry, Goals, Meal } from '../types';
+import type { FoodEntry, Goals, LibraryFood, Meal, MealSuggestions } from '../types';
 import type { StorageRepository } from './StorageRepository';
 
 /** Row shape of the food_entries table (snake_case, per supabase/schema.sql). */
@@ -15,6 +15,7 @@ interface FoodEntryRow {
   protein: number;
   fat: number;
   source: FoodEntry['source'];
+  food_id: string | null;
 }
 
 function toRow(entry: FoodEntry): FoodEntryRow {
@@ -30,6 +31,7 @@ function toRow(entry: FoodEntry): FoodEntryRow {
     protein: entry.protein,
     fat: entry.fat,
     source: entry.source,
+    food_id: entry.foodId ?? null,
   };
 }
 
@@ -41,6 +43,48 @@ function fromRow(row: FoodEntryRow): FoodEntry {
     name: row.name,
     servingDesc: row.serving_desc ?? undefined,
     quantity: row.quantity,
+    calories: row.calories,
+    carbs: row.carbs,
+    protein: row.protein,
+    fat: row.fat,
+    source: row.source,
+    foodId: row.food_id ?? undefined,
+  };
+}
+
+/** Row shape of the foods table; also what meal_suggestions() returns per food. */
+interface FoodRow {
+  id: string;
+  name: string;
+  description: string | null;
+  serving_desc: string | null;
+  calories: number;
+  carbs: number;
+  protein: number;
+  fat: number;
+  source: LibraryFood['source'];
+}
+
+function toFoodRow(food: LibraryFood): FoodRow {
+  return {
+    id: food.id,
+    name: food.name,
+    description: food.description ?? null,
+    serving_desc: food.servingDesc ?? null,
+    calories: food.calories,
+    carbs: food.carbs,
+    protein: food.protein,
+    fat: food.fat,
+    source: food.source,
+  };
+}
+
+function fromFoodRow(row: FoodRow): LibraryFood {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? undefined,
+    servingDesc: row.serving_desc ?? undefined,
     calories: row.calories,
     carbs: row.carbs,
     protein: row.protein,
@@ -115,5 +159,40 @@ export class SupabaseRepository implements StorageRepository {
   async clearGoalsForDate(date: string): Promise<void> {
     const { error } = await this.client.from('daily_goals').delete().eq('date', date);
     if (error) throw new Error(`Clearing day goals failed: ${error.message}`);
+  }
+
+  async getFoods(): Promise<LibraryFood[]> {
+    const { data, error } = await this.client.from('foods').select('*').is('archived_at', null);
+    if (error) throw new Error(`Loading food library failed: ${error.message}`);
+    return ((data ?? []) as FoodRow[]).map(fromFoodRow);
+  }
+
+  async addFood(food: LibraryFood): Promise<void> {
+    const { error } = await this.client.from('foods').insert(toFoodRow(food));
+    if (error) throw new Error(`Saving food failed: ${error.message}`);
+  }
+
+  async updateFood(food: LibraryFood): Promise<void> {
+    const { id, ...row } = toFoodRow(food);
+    const { error } = await this.client.from('foods').update(row).eq('id', id);
+    if (error) throw new Error(`Updating food failed: ${error.message}`);
+  }
+
+  async archiveFood(id: string): Promise<void> {
+    const { error } = await this.client
+      .from('foods')
+      .update({ archived_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(`Archiving food failed: ${error.message}`);
+  }
+
+  async getMealSuggestions(meal: Meal): Promise<MealSuggestions> {
+    const { data, error } = await this.client.rpc('meal_suggestions', { p_meal: meal });
+    if (error) throw new Error(`Loading suggestions failed: ${error.message}`);
+    const rows = (data ?? []) as (FoodRow & { suggestion_group: 'recent' | 'most_used' })[];
+    return {
+      recent: rows.filter((r) => r.suggestion_group === 'recent').map(fromFoodRow),
+      mostUsed: rows.filter((r) => r.suggestion_group === 'most_used').map(fromFoodRow),
+    };
   }
 }

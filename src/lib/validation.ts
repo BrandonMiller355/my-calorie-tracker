@@ -36,6 +36,66 @@ function parseOptionalNonNegative(raw: string): number | null {
   return parseNonNegative(raw);
 }
 
+export interface FoodFormValues {
+  name: string;
+  description: string;
+  servingDesc: string;
+  calories: string;
+  carbs: string;
+  protein: string;
+  fat: string;
+}
+
+export type FoodFormErrors = Partial<Record<keyof FoodFormValues, string>>;
+
+export interface ParsedFoodValues {
+  name: string;
+  description?: string;
+  servingDesc?: string;
+  calories: number;
+  carbs: number;
+  protein: number;
+  fat: number;
+}
+
+/** Same rules as entries: name and calories required, macros default to 0. */
+export function validateFoodForm(
+  values: FoodFormValues,
+): { ok: true; parsed: ParsedFoodValues } | { ok: false; errors: FoodFormErrors } {
+  const errors: FoodFormErrors = {};
+
+  const name = values.name.trim();
+  if (!name) errors.name = 'Name is required';
+
+  const calories = parseNonNegative(values.calories);
+  if (calories === null) errors.calories = 'Enter a number of 0 or more';
+
+  const nutrients: Partial<ParsedFoodValues> = {};
+  for (const field of OPTIONAL_NUTRIENT_FIELDS) {
+    const parsed = parseOptionalNonNegative(values[field]);
+    if (parsed === null) {
+      errors[field] = 'Enter a number of 0 or more';
+    } else {
+      nutrients[field] = parsed;
+    }
+  }
+
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+  return {
+    ok: true,
+    parsed: {
+      name,
+      description: values.description.trim() || undefined,
+      servingDesc: values.servingDesc.trim() || undefined,
+      calories: calories as number,
+      carbs: nutrients.carbs as number,
+      protein: nutrients.protein as number,
+      fat: nutrients.fat as number,
+    },
+  };
+}
+
 export function validateEntryForm(
   values: EntryFormValues,
 ): { ok: true; parsed: ParsedEntryValues } | { ok: false; errors: EntryFormErrors } {
