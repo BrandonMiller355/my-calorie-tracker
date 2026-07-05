@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useState,
   type ReactNode,
 } from 'react';
 import { todayKey } from '../lib/date';
@@ -18,6 +19,8 @@ interface AppState {
   goals: Goals;
   /** true until the user saves goals for the first time */
   goalsAreDefault: boolean;
+  /** true when loading entries or goals from the backend failed */
+  loadFailed: boolean;
 }
 
 type Action =
@@ -27,7 +30,9 @@ type Action =
   | { type: 'entry-updated'; entry: FoodEntry }
   | { type: 'entry-deleted'; id: string }
   | { type: 'goals-loaded'; goals: Goals | null }
-  | { type: 'goals-saved'; goals: Goals };
+  | { type: 'goals-saved'; goals: Goals }
+  | { type: 'load-failed' }
+  | { type: 'retry-load' };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -54,13 +59,17 @@ function reducer(state: AppState, action: Action): AppState {
         : state;
     case 'goals-saved':
       return { ...state, goals: action.goals, goalsAreDefault: false };
+    case 'load-failed':
+      return { ...state, loadFailed: true, entriesLoading: false };
+    case 'retry-load':
+      return { ...state, loadFailed: false, entriesLoading: true };
   }
 }
 
 export interface AppContextValue extends AppState {
-  /** false when running on the in-memory fallback (data won't survive reload) */
-  persistent: boolean;
   setDate: (date: string) => void;
+  /** Re-runs the failed goal/entry loads after loadFailed */
+  retryLoad: () => void;
   addEntry: (entry: Omit<FoodEntry, 'id'>) => Promise<void>;
   updateEntry: (entry: FoodEntry) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
@@ -71,11 +80,9 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({
   repository,
-  persistent,
   children,
 }: {
   repository: StorageRepository;
-  persistent: boolean;
   children: ReactNode;
 }) {
   const [state, dispatch] = useReducer(reducer, {
@@ -84,29 +91,46 @@ export function AppProvider({
     entriesLoading: true,
     goals: DEFAULT_GOALS,
     goalsAreDefault: true,
+    loadFailed: false,
   });
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    repository.getGoals().then((goals) => {
-      if (!cancelled) dispatch({ type: 'goals-loaded', goals });
-    });
+    repository.getGoals().then(
+      (goals) => {
+        if (!cancelled) dispatch({ type: 'goals-loaded', goals });
+      },
+      () => {
+        if (!cancelled) dispatch({ type: 'load-failed' });
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [repository]);
+  }, [repository, reloadKey]);
 
   useEffect(() => {
     let cancelled = false;
-    repository.getEntriesByDate(state.date).then((entries) => {
-      if (!cancelled) dispatch({ type: 'entries-loaded', date: state.date, entries });
-    });
+    repository.getEntriesByDate(state.date).then(
+      (entries) => {
+        if (!cancelled) dispatch({ type: 'entries-loaded', date: state.date, entries });
+      },
+      () => {
+        if (!cancelled) dispatch({ type: 'load-failed' });
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [repository, state.date]);
+  }, [repository, state.date, reloadKey]);
 
   const setDate = useCallback((date: string) => dispatch({ type: 'set-date', date }), []);
+
+  const retryLoad = useCallback(() => {
+    dispatch({ type: 'retry-load' });
+    setReloadKey((k) => k + 1);
+  }, []);
 
   const addEntry = useCallback(
     async (input: Omit<FoodEntry, 'id'>) => {
@@ -142,8 +166,8 @@ export function AppProvider({
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ...state, persistent, setDate, addEntry, updateEntry, deleteEntry, saveGoals }),
-    [state, persistent, setDate, addEntry, updateEntry, deleteEntry, saveGoals],
+    () => ({ ...state, setDate, retryLoad, addEntry, updateEntry, deleteEntry, saveGoals }),
+    [state, setDate, retryLoad, addEntry, updateEntry, deleteEntry, saveGoals],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

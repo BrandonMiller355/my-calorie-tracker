@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useAppState } from '../state/AppState';
+import { useAuth } from '../state/AuthProvider';
 import { DEFAULT_GOALS, type Goals } from '../types';
 
 const FIELDS = [
@@ -11,6 +12,7 @@ const FIELDS = [
 
 export function SettingsScreen() {
   const { goals, goalsAreDefault, saveGoals } = useAppState();
+  const { signOut } = useAuth();
   const [values, setValues] = useState<Record<keyof Goals, string>>({
     calories: String(goals.calories),
     carbs: String(goals.carbs),
@@ -32,7 +34,12 @@ export function SettingsScreen() {
       parsed[key] = n;
     }
     setError(null);
-    await saveGoals(parsed);
+    try {
+      await saveGoals(parsed);
+    } catch {
+      setError('Couldn’t save your goals — they were not stored. Check your connection and try again.');
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -62,6 +69,11 @@ export function SettingsScreen() {
         <button type="submit">Save goals</button>
         {saved && <span className="saved-note">Saved ✓</span>}
       </form>
+      <div className="signout-section">
+        <button type="button" className="secondary" onClick={() => void signOut()}>
+          Sign out
+        </button>
+      </div>
     </div>
   );
 }

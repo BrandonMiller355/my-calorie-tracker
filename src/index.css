@@ -61,12 +61,42 @@ body {
   color: var(--accent);
 }
 
-.persistence-banner {
+.error-banner {
   background: var(--danger-soft);
   color: var(--danger);
   padding: 10px 16px;
   font-size: 14px;
   text-align: center;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.load-error {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--muted);
+}
+
+.load-error p {
+  margin-bottom: 16px;
+}
+
+/* Login */
+.login-screen {
+  max-width: 360px;
+  margin: 15vh auto 0;
+  padding: 0 16px;
+}
+
+.login-screen h1 {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.signout-section {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 /* Date navigation */

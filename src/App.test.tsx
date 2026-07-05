@@ -1,15 +1,55 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
-import { InMemoryRepository } from './storage';
-import type { FoodSearchResult } from './types';
+import type { StorageRepository } from './storage';
+import type { FoodEntry, FoodSearchResult, Goals } from './types';
 
 type RouterEntry = string | { pathname: string; state: unknown };
 
-function renderApp(repo: InMemoryRepository, initialEntries: RouterEntry[] = ['/']) {
+/** In-memory StorageRepository with toggleable failures, for tests only. */
+class FakeRepository implements StorageRepository {
+  private entries = new Map<string, FoodEntry>();
+  private goals: Goals | null = null;
+  failReads = false;
+  failWrites = false;
+
+  private assertReads() {
+    if (this.failReads) throw new Error('backend unreachable');
+  }
+  private assertWrites() {
+    if (this.failWrites) throw new Error('backend unreachable');
+  }
+
+  async getEntriesByDate(date: string): Promise<FoodEntry[]> {
+    this.assertReads();
+    return [...this.entries.values()].filter((e) => e.date === date);
+  }
+  async addEntry(entry: FoodEntry): Promise<void> {
+    this.assertWrites();
+    this.entries.set(entry.id, { ...entry });
+  }
+  async updateEntry(entry: FoodEntry): Promise<void> {
+    this.assertWrites();
+    this.entries.set(entry.id, { ...entry });
+  }
+  async deleteEntry(id: string): Promise<void> {
+    this.assertWrites();
+    this.entries.delete(id);
+  }
+  async getGoals(): Promise<Goals | null> {
+    this.assertReads();
+    return this.goals ? { ...this.goals } : null;
+  }
+  async saveGoals(goals: Goals): Promise<void> {
+    this.assertWrites();
+    this.goals = { ...goals };
+  }
+}
+
+function renderApp(repo: StorageRepository, initialEntries: RouterEntry[] = ['/']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <App repository={repo} persistent={true} />
+      <App repository={repo} />
     </MemoryRouter>,
   );
 }
@@ -36,13 +76,13 @@ async function addFood(
 
 describe('App (spec scenario walkthrough)', () => {
   it('empty day shows zero totals', async () => {
-    renderApp(new InMemoryRepository());
+    renderApp(new FakeRepository());
     await screen.findByRole('region', { name: 'Breakfast' });
     expect(screen.getByText('2000 kcal left')).toBeInTheDocument();
   });
 
   it('adds an entry, groups it by meal, and updates totals', async () => {
-    renderApp(new InMemoryRepository());
+    renderApp(new FakeRepository());
     await addFood('Breakfast', {
       name: 'Oatmeal',
       calories: '300',
@@ -58,7 +98,7 @@ describe('App (spec scenario walkthrough)', () => {
   });
 
   it('rejects invalid nutrition values without saving', async () => {
-    renderApp(new InMemoryRepository());
+    renderApp(new FakeRepository());
     const section = await screen.findByRole('region', { name: 'Lunch' });
     fireEvent.click(within(section).getByText('+ Add food'));
 
@@ -75,7 +115,7 @@ describe('App (spec scenario walkthrough)', () => {
   });
 
   it('edits an entry and totals update immediately', async () => {
-    renderApp(new InMemoryRepository());
+    renderApp(new FakeRepository());
     await addFood('Dinner', { name: 'Pasta', calories: '600', carbs: '80', protein: '20', fat: '15' });
 
     fireEvent.click(screen.getByText('Pasta'));
@@ -88,7 +128,7 @@ describe('App (spec scenario walkthrough)', () => {
   });
 
   it('deletes an entry and totals update immediately', async () => {
-    renderApp(new InMemoryRepository());
+    renderApp(new FakeRepository());
     await addFood('Snacks', { name: 'Chips', calories: '150', carbs: '15', protein: '2', fat: '9' });
 
     fireEvent.click(screen.getByLabelText('Delete Chips'));
@@ -97,7 +137,7 @@ describe('App (spec scenario walkthrough)', () => {
   });
 
   it('data persists across an app restart with the same repository', async () => {
-    const repo = new InMemoryRepository();
+    const repo = new FakeRepository();
     const first = renderApp(repo);
     await addFood('Lunch', { name: 'Sandwich', calories: '400', carbs: '40', protein: '25', fat: '12' });
     first.unmount();
@@ -115,7 +155,7 @@ describe('App (spec scenario walkthrough)', () => {
       calories: 200,
       // carbs, protein, fat unknown
     };
-    renderApp(new InMemoryRepository(), [{ pathname: '/', state: { prefill } }]);
+    renderApp(new FakeRepository(), [{ pathname: '/', state: { prefill } }]);
 
     const form = await screen.findByRole('form', { name: 'Add food entry' });
     expect(within(form).getByRole('alert')).toHaveTextContent(/missing/i);
@@ -135,15 +175,57 @@ describe('App (spec scenario walkthrough)', () => {
     expect(await screen.findByText('Mystery Snack')).toBeInTheDocument();
     expect(screen.getByText('1800 kcal left')).toBeInTheDocument();
   });
+});
 
-  it('warns when storage is not persistent', async () => {
-    render(
-      <MemoryRouter>
-        <App repository={new InMemoryRepository()} persistent={false} />
-      </MemoryRouter>,
-    );
-    expect(
-      await screen.findByText(/your data will not be saved/i),
-    ).toBeInTheDocument();
+describe('App (backend failure handling)', () => {
+  it('shows an error state with retry when loading fails, and recovers', async () => {
+    const repo = new FakeRepository();
+    repo.failReads = true;
+    renderApp(repo);
+
+    expect(await screen.findByText(/can’t be loaded/i)).toBeInTheDocument();
+
+    repo.failReads = false;
+    fireEvent.click(screen.getByText('Retry'));
+    expect(await screen.findByRole('region', { name: 'Breakfast' })).toBeInTheDocument();
+    expect(screen.queryByText(/can’t be loaded/i)).toBeNull();
+  });
+
+  it('surfaces a failed add and does not show the entry as saved', async () => {
+    const repo = new FakeRepository();
+    renderApp(repo);
+    const section = await screen.findByRole('region', { name: 'Breakfast' });
+    repo.failWrites = true;
+
+    fireEvent.click(within(section).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Doomed toast' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '100' } });
+    fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '10' } });
+    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '3' } });
+    fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '2' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+
+    // Form stays open with an error; nothing lands in the log
+    expect(await within(form).findByText(/was not stored/i)).toBeInTheDocument();
+    expect(screen.getByText('2000 kcal left')).toBeInTheDocument();
+
+    // Clearing the failure lets the same form submit succeed
+    repo.failWrites = false;
+    fireEvent.click(within(form).getByText('Add to log'));
+    expect(await screen.findByText('Doomed toast')).toBeInTheDocument();
+    expect(screen.getByText('1900 kcal left')).toBeInTheDocument();
+  });
+
+  it('surfaces a failed delete and keeps the entry in the log', async () => {
+    const repo = new FakeRepository();
+    renderApp(repo);
+    await addFood('Snacks', { name: 'Chips', calories: '150', carbs: '15', protein: '2', fat: '9' });
+    repo.failWrites = true;
+
+    fireEvent.click(screen.getByLabelText('Delete Chips'));
+    expect(await screen.findByText(/was not removed/i)).toBeInTheDocument();
+    expect(screen.getByText('Chips')).toBeInTheDocument();
+    expect(screen.getByText('1850 kcal left')).toBeInTheDocument();
   });
 });

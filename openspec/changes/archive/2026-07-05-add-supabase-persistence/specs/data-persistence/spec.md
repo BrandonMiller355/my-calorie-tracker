@@ -1,9 +1,4 @@
-# data-persistence Specification
-
-## Purpose
-Persist food entries and goals durably in a hosted Supabase Postgres database, scoped to the authenticated user, behind a swappable storage interface.
-
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Durable hosted persistence
 The system SHALL persist all food entries and user goals in a hosted Supabase Postgres database, scoped to the authenticated user, so that data survives page reloads, browser restarts, cleared site data, and is available from any device the user signs in on.
@@ -34,6 +29,8 @@ The app is online-only. When the Supabase backend cannot be reached, the system 
 - **WHEN** adding, updating, or deleting an entry fails because the backend is unreachable
 - **THEN** the user is informed the change was not saved and the UI does not show it as persisted
 
+## MODIFIED Requirements
+
 ### Requirement: Storage abstraction
 All reads and writes of entries and goals MUST go through a single storage interface (e.g., `StorageRepository`) with async methods; UI components MUST NOT access the Supabase client directly, so the backing implementation can be substituted (e.g., in tests, or a future alternative backend) without UI changes.
 
@@ -41,9 +38,8 @@ All reads and writes of entries and goals MUST go through a single storage inter
 - **WHEN** the Supabase implementation is replaced by another implementation of the same interface (e.g., in-memory in tests)
 - **THEN** the application compiles and functions without changes to UI components
 
-### Requirement: Day-keyed retrieval
-The storage layer SHALL support retrieving all entries for a given calendar date efficiently.
+## REMOVED Requirements
 
-#### Scenario: Load a day's entries
-- **WHEN** the app requests entries for a specific date
-- **THEN** the storage layer returns exactly the entries whose date matches, without loading other days
+### Requirement: Durable local persistence
+**Reason**: Local IndexedDB persistence is replaced by durable hosted persistence in Supabase; the app is now online-only and the in-memory fallback no longer runs in production.
+**Migration**: No data migration — existing local IndexedDB data is intentionally abandoned. `InMemoryRepository` is deleted along with `IndexedDbRepository`; tests use an in-memory fake defined within the test suite.

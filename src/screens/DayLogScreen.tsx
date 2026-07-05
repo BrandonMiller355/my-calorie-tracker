@@ -20,9 +20,19 @@ interface LocationState {
 }
 
 export function DayLogScreen() {
-  const { date, entries, entriesLoading, goals, goalsAreDefault, setDate, deleteEntry } =
-    useAppState();
+  const {
+    date,
+    entries,
+    entriesLoading,
+    goals,
+    goalsAreDefault,
+    loadFailed,
+    retryLoad,
+    setDate,
+    deleteEntry,
+  } = useAppState();
   const [form, setForm] = useState<FormMode>(null);
+  const [deleteFailed, setDeleteFailed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -40,10 +50,30 @@ export function DayLogScreen() {
 
   const totals = sumTotals(entries);
 
+  if (loadFailed) {
+    return (
+      <div className="day-log">
+        <DateNav date={date} onChange={setDate} />
+        <div className="load-error" role="alert">
+          <p>Couldn’t reach the server, so your log can’t be loaded right now.</p>
+          <button type="button" onClick={retryLoad}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="day-log">
       <DateNav date={date} onChange={setDate} />
       <Summary totals={totals} goals={goals} goalsAreDefault={goalsAreDefault} />
+
+      {deleteFailed && (
+        <p className="error-banner" role="alert">
+          Couldn’t delete the entry — it was not removed. Check your connection and try again.
+        </p>
+      )}
 
       {entriesLoading ? (
         <p className="loading">Loading…</p>
@@ -55,7 +85,10 @@ export function DayLogScreen() {
             entries={entries.filter((e) => e.meal === meal)}
             onAdd={() => setForm({ kind: 'add', meal })}
             onEdit={(entry) => setForm({ kind: 'edit', entry })}
-            onDelete={(id) => void deleteEntry(id)}
+            onDelete={(id) => {
+              setDeleteFailed(false);
+              deleteEntry(id).catch(() => setDeleteFailed(true));
+            }}
           />
         ))
       )}

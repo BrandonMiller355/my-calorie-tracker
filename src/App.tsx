@@ -2,31 +2,13 @@ import { NavLink, Route, Routes } from 'react-router-dom';
 import { DayLogScreen } from './screens/DayLogScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { AppProvider, useAppState } from './state/AppState';
+import { AppProvider } from './state/AppState';
 import type { StorageRepository } from './storage';
 
-function PersistenceBanner() {
-  const { persistent } = useAppState();
-  if (persistent) return null;
+export default function App({ repository }: { repository: StorageRepository }) {
   return (
-    <div className="persistence-banner" role="alert">
-      Storage is unavailable in this browser — your data will not be saved after you close or
-      reload the page.
-    </div>
-  );
-}
-
-export default function App({
-  repository,
-  persistent,
-}: {
-  repository: StorageRepository;
-  persistent: boolean;
-}) {
-  return (
-    <AppProvider repository={repository} persistent={persistent}>
+    <AppProvider repository={repository}>
       <div className="app">
-        <PersistenceBanner />
         <main className="app-main">
           <Routes>
             <Route path="/" element={<DayLogScreen />} />

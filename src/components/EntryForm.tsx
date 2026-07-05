@@ -38,6 +38,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   });
   const [errors, setErrors] = useState<EntryFormErrors>({});
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const servingDesc = editing?.servingDesc ?? prefill?.servingDesc;
 
@@ -61,6 +62,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     }
     setErrors({});
     setSaving(true);
+    setSaveFailed(false);
     try {
       if (editing) {
         await updateEntry({ ...editing, ...result.parsed, meal });
@@ -74,6 +76,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         });
       }
       onClose();
+    } catch {
+      setSaveFailed(true);
     } finally {
       setSaving(false);
     }
@@ -141,6 +145,12 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             </label>
           ))}
         </div>
+
+        {saveFailed && (
+          <p className="field-error" role="alert">
+            Couldn’t save — your change was not stored. Check your connection and try again.
+          </p>
+        )}
 
         <div className="form-actions">
           <button type="button" className="secondary" onClick={onClose}>
