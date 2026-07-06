@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { searchFoods } from '../api/openFoodFacts';
+import { unitLabel } from '../lib/units';
 import type { FoodSearchResult, Meal } from '../types';
 
 type SearchState =
@@ -28,6 +29,23 @@ export function SearchScreen() {
   const navigate = useNavigate();
   const abortRef = useRef<AbortController | null>(null);
 
+  async function runSearch(q: string) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setState({ kind: 'loading' });
+    try {
+      const results = await searchFoods(q, { signal: controller.signal });
+      setState({ kind: 'done', results });
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setState({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Search failed',
+      });
+    }
+  }
+
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
@@ -35,21 +53,8 @@ export function SearchScreen() {
       return;
     }
 
-    const timer = setTimeout(async () => {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setState({ kind: 'loading' });
-      try {
-        const results = await searchFoods(q, { signal: controller.signal });
-        setState({ kind: 'done', results });
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        setState({
-          kind: 'error',
-          message: err instanceof Error ? err.message : 'Search failed',
-        });
-      }
+    const timer = setTimeout(() => {
+      void runSearch(q);
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
@@ -90,7 +95,14 @@ export function SearchScreen() {
         <div className="search-error" role="alert">
           <p>Food search is unavailable right now ({state.message}).</p>
           <p>
-            You can still{' '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void runSearch(query.trim())}
+            >
+              Retry
+            </button>{' '}
+            or still{' '}
             <Link to="/" state={{ openManual: true, meal: fromForm?.meal }}>
               add a food manually
             </Link>
@@ -113,23 +125,36 @@ export function SearchScreen() {
       )}
 
       {state.kind === 'done' && state.results.length > 0 && (
-        <ul className="result-list">
-          {state.results.map((r) => (
-            <li key={r.id}>
-              <button className="result-row" onClick={() => select(r)}>
-                <span className="result-name">
-                  {r.name}
-                  {r.brand && <span className="result-brand"> · {r.brand}</span>}
-                </span>
-                <span className="result-serving">{r.servingDesc}</span>
-                <span className="result-macros">
-                  {fmt(r.calories, 'kcal')} · F {fmt(r.fat, 'g')} · C {fmt(r.carbs, 'g')} · P{' '}
-                  {fmt(r.protein, 'g')}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="result-list">
+            {state.results.map((r) => (
+              <li key={r.id}>
+                <button className="result-row" onClick={() => select(r)}>
+                  <span className="result-name">
+                    {r.name}
+                    {r.brand && <span className="result-brand"> · {r.brand}</span>}
+                  </span>
+                  <span className="result-serving">
+                    {r.servingSize
+                      ? `1 ${r.servingLabel} = ${r.servingSize.amount} ${unitLabel(r.servingSize.unit)}`
+                      : `1 ${r.servingLabel}`}
+                  </span>
+                  <span className="result-macros">
+                    {fmt(r.calories, 'kcal')} · F {fmt(r.fat, 'g')} · C {fmt(r.carbs, 'g')} · P{' '}
+                    {fmt(r.protein, 'g')}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="search-hint">
+            Not what you’re looking for?{' '}
+            <Link to="/" state={{ openManual: true, meal: fromForm?.meal }}>
+              Add a new food manually
+            </Link>
+            .
+          </p>
+        </>
       )}
     </div>
   );

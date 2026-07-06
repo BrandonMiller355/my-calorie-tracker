@@ -1,6 +1,10 @@
+import { DEFAULT_SERVING_LABEL, type ServingAnchor } from '../types';
+import { availableUnits, isMeasureUnit } from './units';
+
 export interface EntryFormValues {
   name: string;
-  quantity: string;
+  amount: string;
+  unit: string;
   calories: string;
   carbs: string;
   protein: string;
@@ -11,7 +15,8 @@ export type EntryFormErrors = Partial<Record<keyof EntryFormValues, string>>;
 
 export interface ParsedEntryValues {
   name: string;
-  quantity: number;
+  amount: number;
+  unit: string;
   calories: number;
   carbs: number;
   protein: number;
@@ -36,10 +41,57 @@ function parseOptionalNonNegative(raw: string): number | null {
   return parseNonNegative(raw);
 }
 
-export interface FoodFormValues {
+/** Form fields for a serving anchor: label + optional equivalence. */
+export interface ServingAnchorFormValues {
+  servingLabel: string;
+  servingSizeAmount: string;
+  /** A MeasureUnit, or '' for no equivalence */
+  servingSizeUnit: string;
+}
+
+export type ServingAnchorFormErrors = Partial<Record<keyof ServingAnchorFormValues, string>>;
+
+/**
+ * Blank label defaults to "serving". Labels must not collide with a measure
+ * unit name (stored entry units couldn't be told apart). Equivalence needs
+ * both amount and unit, with amount > 0; both blank means count-only.
+ */
+export function validateServingAnchor(
+  values: ServingAnchorFormValues,
+): { ok: true; parsed: ServingAnchor } | { ok: false; errors: ServingAnchorFormErrors } {
+  const errors: ServingAnchorFormErrors = {};
+
+  const servingLabel = values.servingLabel.trim() || DEFAULT_SERVING_LABEL;
+  if (isMeasureUnit(servingLabel)) {
+    errors.servingLabel = `"${servingLabel}" is a measurement unit — pick another name`;
+  }
+
+  const rawAmount = values.servingSizeAmount.trim();
+  const unit = values.servingSizeUnit;
+  let parsedSize: ServingAnchor['servingSize'];
+  if (rawAmount === '' && unit === '') {
+    parsedSize = undefined;
+  } else if (unit === '') {
+    errors.servingSizeUnit = 'Pick a unit for the serving size';
+  } else if (!isMeasureUnit(unit)) {
+    errors.servingSizeUnit = 'Unknown unit';
+  } else {
+    const amount = parseNonNegative(rawAmount);
+    if (amount === null || amount <= 0) {
+      errors.servingSizeAmount = 'Enter a number greater than 0';
+    } else {
+      parsedSize = { amount, unit };
+    }
+  }
+
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+  return { ok: true, parsed: { servingLabel, servingSize: parsedSize } };
+}
+
+export interface FoodFormValues extends ServingAnchorFormValues {
   name: string;
   description: string;
-  servingDesc: string;
   calories: string;
   carbs: string;
   protein: string;
@@ -48,10 +100,9 @@ export interface FoodFormValues {
 
 export type FoodFormErrors = Partial<Record<keyof FoodFormValues, string>>;
 
-export interface ParsedFoodValues {
+export interface ParsedFoodValues extends ServingAnchor {
   name: string;
   description?: string;
-  servingDesc?: string;
   calories: number;
   carbs: number;
   protein: number;
@@ -67,6 +118,9 @@ export function validateFoodForm(
   const name = values.name.trim();
   if (!name) errors.name = 'Name is required';
 
+  const anchor = validateServingAnchor(values);
+  if (!anchor.ok) Object.assign(errors, anchor.errors);
+
   const calories = parseNonNegative(values.calories);
   if (calories === null) errors.calories = 'Enter a number of 0 or more';
 
@@ -80,14 +134,14 @@ export function validateFoodForm(
     }
   }
 
-  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  if (Object.keys(errors).length > 0 || !anchor.ok) return { ok: false, errors };
 
   return {
     ok: true,
     parsed: {
       name,
       description: values.description.trim() || undefined,
-      servingDesc: values.servingDesc.trim() || undefined,
+      ...anchor.parsed,
       calories: calories as number,
       carbs: nutrients.carbs as number,
       protein: nutrients.protein as number,
@@ -98,15 +152,20 @@ export function validateFoodForm(
 
 export function validateEntryForm(
   values: EntryFormValues,
+  anchor: ServingAnchor,
 ): { ok: true; parsed: ParsedEntryValues } | { ok: false; errors: EntryFormErrors } {
   const errors: EntryFormErrors = {};
 
   const name = values.name.trim();
   if (!name) errors.name = 'Name is required';
 
-  const quantity = parseNonNegative(values.quantity);
-  if (quantity === null || quantity <= 0) {
-    errors.quantity = 'Quantity must be a number greater than 0';
+  const amount = parseNonNegative(values.amount);
+  if (amount === null || amount <= 0) {
+    errors.amount = 'Amount must be a number greater than 0';
+  }
+
+  if (!availableUnits(anchor).includes(values.unit)) {
+    errors.unit = 'Pick a unit';
   }
 
   const calories = parseNonNegative(values.calories);
@@ -128,7 +187,8 @@ export function validateEntryForm(
     ok: true,
     parsed: {
       name,
-      quantity: quantity as number,
+      amount: amount as number,
+      unit: values.unit,
       calories: calories as number,
       carbs: nutrients.carbs as number,
       protein: nutrients.protein as number,

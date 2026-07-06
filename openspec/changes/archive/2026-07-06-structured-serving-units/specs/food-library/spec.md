@@ -1,9 +1,6 @@
-# food-library Specification
+# food-library Delta Spec
 
-## Purpose
-Maintain a self-populating, per-user library of saved foods so repeat logging is a one-tap action: foods are captured automatically as they are logged, suggested per meal, searchable from the entry form's name field, and manageable (create/edit/archive) on a dedicated screen.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Personal food library
 The system SHALL maintain a per-user library of saved foods. Each library food MUST record a name, per-serving calories, carbs (g), protein (g), and fat (g), and a serving anchor (count label, defaulting to "serving", plus optional single-dimension equivalence per the serving-units capability), and MAY record a description (brand, prep notes). Library foods MUST be deduplicated per user on the normalized (case-insensitive, trimmed) name.
@@ -30,17 +27,6 @@ When the user logs an entry whose name does not match any library food, the syst
 #### Scenario: Capture failure does not block logging
 - **WHEN** saving the entry succeeds but saving the library food fails
 - **THEN** the entry is persisted and no error blocks the user
-
-### Requirement: Per-meal suggestions
-When the name field is focused and empty, the system SHALL suggest up to 3 library foods most recently logged for the currently selected meal, followed by up to 3 library foods most frequently logged for that meal. The two groups MUST NOT repeat a food, frequency MUST be counted per meal (not across all meals), archived foods MUST be excluded, and the lists SHALL come up short rather than padding with foods from other meals.
-
-#### Scenario: Focused empty field shows meal-specific suggestions
-- **WHEN** the user opens the add-food form with meal "breakfast" and focuses the empty name field
-- **THEN** up to 3 breakfast-recent foods and up to 3 breakfast-most-used foods are shown, with no food appearing twice
-
-#### Scenario: Sparse history yields short lists
-- **WHEN** only 2 distinct foods have ever been logged for the selected meal
-- **THEN** only those foods are suggested; no foods from other meals fill the remaining slots
 
 ### Requirement: Library-first name search
 As the user types in the name field, the system SHALL match against the library's food names and descriptions (case-insensitive) and show matching foods in a dropdown, each with its description as a secondary line. The dropdown MUST always offer two actions: searching the online food database for the typed text, and using the typed text as a new food via manual entry. Selecting a library food SHALL pre-fill the form with its nutrition values and serving anchor, and populate the unit picker from that anchor.

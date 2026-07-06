@@ -11,13 +11,28 @@ create table food_entries (
   date text not null,
   meal text not null check (meal in ('breakfast', 'lunch', 'dinner', 'snacks')),
   name text not null,
-  serving_desc text,
+  -- What the user logged: an amount in either a measure unit or the entry's
+  -- own serving label. The serving anchor (label + optional equivalence) is
+  -- snapshotted per entry so history never depends on the foods table.
+  amount numeric not null,
+  unit text not null,
+  serving_label text not null default 'serving',
+  serving_size_amount numeric,
+  serving_size_unit text,
+  -- Serving multiplier derived from amount+unit at save; nutrition is per serving.
   quantity numeric not null default 1,
   calories numeric not null,
   carbs numeric not null,
   protein numeric not null,
   fat numeric not null,
-  source text not null check (source in ('manual', 'search'))
+  source text not null check (source in ('manual', 'search')),
+  check (serving_size_unit is null or serving_size_unit in
+    ('g', 'oz', 'lb', 'kg', 'ml', 'floz', 'cup', 'tbsp', 'tsp')),
+  check ((serving_size_amount is null) = (serving_size_unit is null)),
+  check (serving_size_amount is null or serving_size_amount > 0),
+  -- The logged unit is either a measure unit or exactly this row's label.
+  check (unit in ('g', 'oz', 'lb', 'kg', 'ml', 'floz', 'cup', 'tbsp', 'tsp')
+    or unit = serving_label)
 );
 
 create index food_entries_user_date on food_entries (user_id, date);
@@ -86,7 +101,12 @@ create table foods (
   name text not null,
   -- Brand, prep notes, weights, e.g. "15g jelly, 16g pbfit, 2 sara lee slices"
   description text,
-  serving_desc text,
+  -- Serving anchor: nutrition is per one `serving_label` (e.g. "serving",
+  -- "can (drained)"); the optional equivalence states what one count equals
+  -- and unlocks logging in same-dimension measure units.
+  serving_label text not null default 'serving',
+  serving_size_amount numeric,
+  serving_size_unit text,
   -- Per single serving
   calories numeric not null,
   carbs numeric not null,
@@ -96,7 +116,11 @@ create table foods (
   created_at timestamptz not null default now(),
   -- Archived foods are hidden from suggestions and search but never deleted,
   -- so old entries keep a valid reference.
-  archived_at timestamptz
+  archived_at timestamptz,
+  check (serving_size_unit is null or serving_size_unit in
+    ('g', 'oz', 'lb', 'kg', 'ml', 'floz', 'cup', 'tbsp', 'tsp')),
+  check ((serving_size_amount is null) = (serving_size_unit is null)),
+  check (serving_size_amount is null or serving_size_amount > 0)
 );
 
 -- The dedup key: logging the same name twice resolves to one library row,
@@ -126,7 +150,9 @@ returns table (
   id uuid,
   name text,
   description text,
-  serving_desc text,
+  serving_label text,
+  serving_size_amount numeric,
+  serving_size_unit text,
   calories numeric,
   carbs numeric,
   protein numeric,
@@ -163,7 +189,8 @@ as $$
     union all
     select food_id, 'most_used' as suggestion_group, ord from most_used
   )
-  select f.id, f.name, f.description, f.serving_desc,
+  select f.id, f.name, f.description,
+    f.serving_label, f.serving_size_amount, f.serving_size_unit,
     f.calories, f.carbs, f.protein, f.fat, f.source, r.suggestion_group
   from ranked r
   join foods f on f.id = r.food_id

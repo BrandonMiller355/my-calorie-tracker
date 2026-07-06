@@ -1,12 +1,13 @@
 import { mapProduct, searchFoods, type OffProduct } from './openFoodFacts';
 
 describe('mapProduct', () => {
-  it('prefers per-serving nutrients and keeps serving size', () => {
+  it('prefers per-serving nutrients and derives a weight equivalence', () => {
     const p: OffProduct = {
       code: '123',
       product_name: 'Greek Yogurt',
       brands: 'Fage',
-      serving_size: '170 g',
+      serving_quantity: 170,
+      serving_quantity_unit: 'g',
       nutriments: {
         'energy-kcal_serving': 90,
         carbohydrates_serving: 5,
@@ -19,7 +20,8 @@ describe('mapProduct', () => {
       id: '123',
       name: 'Greek Yogurt',
       brand: 'Fage',
-      servingDesc: '170 g',
+      servingLabel: 'serving',
+      servingSize: { amount: 170, unit: 'g' },
       calories: 90,
       carbs: 5,
       protein: 17,
@@ -27,7 +29,17 @@ describe('mapProduct', () => {
     });
   });
 
-  it('falls back to per-100g values with a "100 g" serving label', () => {
+  it('treats a blank serving_quantity_unit as grams and coerces string quantities', () => {
+    const p: OffProduct = {
+      code: '124',
+      product_name: 'Granola',
+      serving_quantity: '55',
+      nutriments: { 'energy-kcal_serving': 260 },
+    };
+    expect(mapProduct(p, 0)!.servingSize).toEqual({ amount: 55, unit: 'g' });
+  });
+
+  it('falls back to per-100g values anchored at 1 serving = 100 g', () => {
     const p: OffProduct = {
       code: '456',
       product_name: 'Oats',
@@ -39,8 +51,37 @@ describe('mapProduct', () => {
       },
     };
     const result = mapProduct(p, 0)!;
-    expect(result.servingDesc).toBe('100 g');
+    expect(result.servingLabel).toBe('serving');
+    expect(result.servingSize).toEqual({ amount: 100, unit: 'g' });
     expect(result.calories).toBe(379);
+  });
+
+  it('anchors the per-100g fallback at 100 ml when nutrition_data_per is 100ml', () => {
+    const p: OffProduct = {
+      code: '457',
+      product_name: 'Oat Milk',
+      nutrition_data_per: '100ml',
+      nutriments: { 'energy-kcal_100g': 46 },
+    };
+    expect(mapProduct(p, 0)!.servingSize).toEqual({ amount: 100, unit: 'ml' });
+  });
+
+  it.each([
+    ['missing quantity', {}],
+    ['zero quantity', { serving_quantity: 0 }],
+    ['junk quantity', { serving_quantity: 'about a cup' }],
+    ['odd unit', { serving_quantity: 2, serving_quantity_unit: 'unit' }],
+  ])('degrades per-serving results with %s to a count-only anchor', (_name, servingFields) => {
+    const p: OffProduct = {
+      code: '458',
+      product_name: 'Mystery Bar',
+      ...servingFields,
+      nutriments: { 'energy-kcal_serving': 190 },
+    };
+    const result = mapProduct(p, 0)!;
+    expect(result.servingLabel).toBe('serving');
+    expect(result.servingSize).toBeUndefined();
+    expect(result.calories).toBe(190);
   });
 
   it('leaves missing nutrients undefined, never 0', () => {

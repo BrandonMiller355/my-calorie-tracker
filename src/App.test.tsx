@@ -266,6 +266,9 @@ describe('App (spec scenario walkthrough)', () => {
 
     fireEvent.click(screen.getByText('Pasta'));
     const form = screen.getByRole('form', { name: 'Edit food entry' });
+    // Nutrition inputs are collapsed on known entries until deliberately revealed
+    expect(within(form).queryByLabelText(/Calories/)).toBeNull();
+    fireEvent.click(within(form).getByText('Edit nutrition'));
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '450' } });
     fireEvent.click(within(form).getByText('Save changes'));
 
@@ -308,7 +311,8 @@ describe('App (spec scenario walkthrough)', () => {
     const prefill: FoodSearchResult = {
       id: 'off-1',
       name: 'Mystery Snack',
-      servingDesc: '100 g',
+      servingLabel: 'serving',
+      servingSize: { amount: 100, unit: 'g' },
       calories: 200,
       // carbs, protein, fat unknown
     };
@@ -367,6 +371,9 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     fireEvent.click(await screen.findByRole('option', { name: /Greek yogurt/ }));
 
     expect(within(form).getByLabelText('Name')).toHaveValue('Greek yogurt');
+    // Nutrition collapses to the computed summary; revealing shows the values
+    expect(within(form).getByTestId('entry-preview')).toHaveTextContent('120 kcal');
+    fireEvent.click(within(form).getByText('Edit nutrition'));
     expect(within(form).getByLabelText(/Calories/)).toHaveValue('120');
     expect(within(form).getByLabelText(/Protein/)).toHaveValue('15');
   });
@@ -424,6 +431,7 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     const form = screen.getByRole('form', { name: 'Add food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
     fireEvent.click(await screen.findByRole('option', { name: /Rice/ }));
+    fireEvent.click(within(form).getByText('Edit nutrition'));
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '250' } });
     fireEvent.click(within(form).getByText('Add to log'));
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
@@ -439,7 +447,8 @@ describe('Search escalation round trip', () => {
   const granola: FoodSearchResult = {
     id: 'off-1',
     name: 'Granola',
-    servingDesc: '100 g',
+    servingLabel: 'serving',
+    servingSize: { amount: 100, unit: 'g' },
     calories: 450,
     carbs: 60,
     protein: 10,
@@ -478,6 +487,23 @@ describe('Search escalation round trip', () => {
     const form = await screen.findByRole('form', { name: 'Add food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
     expect(within(form).getByLabelText('Meal')).toHaveValue('snacks');
+  });
+
+  it('offers a retry after a failed search, which recovers without retyping', async () => {
+    // The module mock accumulates calls from earlier tests in this describe
+    vi.mocked(searchFoods).mockClear();
+    vi.mocked(searchFoods).mockRejectedValueOnce(new Error('Food search failed (HTTP 503)'));
+    vi.mocked(searchFoods).mockResolvedValueOnce([granola]);
+    renderApp(new FakeRepository(), ['/search']);
+
+    fireEvent.change(await screen.findByPlaceholderText(/Open Food Facts/), {
+      target: { value: 'granola' },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(/unavailable right now/);
+
+    fireEvent.click(screen.getByText('Retry'));
+    expect(await screen.findByRole('button', { name: /Granola/ })).toBeInTheDocument();
+    expect(searchFoods).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -558,6 +584,156 @@ describe('Food library screen', () => {
     // suggestions resolve within a waitFor poll; the archived food never shows
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
     expect(screen.queryByRole('option', { name: /Chips/ })).toBeNull();
+  });
+});
+
+describe('Structured serving units', () => {
+  it('logs a per-100g search food by weight and scales totals', async () => {
+    const prefill: FoodSearchResult = {
+      id: 'off-2',
+      name: 'Oats',
+      servingLabel: 'serving',
+      servingSize: { amount: 100, unit: 'g' },
+      calories: 200,
+      carbs: 30,
+      protein: 8,
+      fat: 4,
+    };
+    renderApp(new FakeRepository(), [{ pathname: '/', state: { prefill } }]);
+
+    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '45' } });
+    fireEvent.change(within(form).getByLabelText('Unit'), { target: { value: 'g' } });
+
+    // The live preview shows the scaled contribution before saving
+    expect(within(form).getByTestId('entry-preview')).toHaveTextContent('90 kcal');
+    expect(within(form).getByText(/per 1 serving \(= 100 g\)/)).toHaveTextContent('200 kcal');
+
+    fireEvent.click(within(form).getByText('Add to log'));
+
+    // 45 g of a 100 g serving at 200 kcal → 90 kcal consumed
+    expect(await screen.findByText('Oats')).toBeInTheDocument();
+    expect(screen.getByText('1910 kcal left')).toBeInTheDocument();
+  });
+
+  it('a count-only food offers only its label and multiplies by count', async () => {
+    renderApp(new FakeRepository());
+    const dinner = await screen.findByRole('region', { name: 'Dinner' });
+    fireEvent.click(within(dinner).getByText('+ Add food'));
+
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Chili' } });
+    fireEvent.change(within(form).getByLabelText('Serving name'), { target: { value: 'bowl' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '300' } });
+    fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '30' } });
+    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '20' } });
+    fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '10' } });
+
+    const unitSelect = within(form).getByLabelText('Unit');
+    expect(within(unitSelect).getAllByRole('option').map((o) => o.textContent)).toEqual(['bowl']);
+
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '2' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    expect(screen.getByText('1400 kcal left')).toBeInTheDocument();
+  });
+
+  it('rejects a measure unit name as the serving label', async () => {
+    renderApp(new FakeRepository());
+    const lunch = await screen.findByRole('region', { name: 'Lunch' });
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Sugar' } });
+    fireEvent.change(within(form).getByLabelText('Serving name'), { target: { value: 'g' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '16' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+
+    expect(await within(form).findByText(/is a measurement unit/)).toBeInTheDocument();
+    expect(screen.queryByText('Sugar')).toBeNull();
+  });
+
+  it('an inline serving definition round-trips into the library unit picker', async () => {
+    renderApp(new FakeRepository());
+    const lunch = await screen.findByRole('region', { name: 'Lunch' });
+
+    // Define "1 can (drained) = 120 g" while logging a new food
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Tuna' } });
+    fireEvent.change(within(form).getByLabelText('Serving name'), {
+      target: { value: 'can (drained)' },
+    });
+    fireEvent.change(within(form).getByLabelText(/Equals/), { target: { value: '120' } });
+    fireEvent.change(within(form).getByLabelText('Serving unit'), { target: { value: 'g' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '100' } });
+    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '22' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    expect(screen.getByText('1900 kcal left')).toBeInTheDocument();
+
+    // Re-log from the captured library food: label and weight units offered
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.focus(within(form).getByLabelText('Name'));
+    fireEvent.click(await screen.findByRole('option', { name: /Tuna/ }));
+
+    const unitSelect = within(form).getByLabelText('Unit');
+    expect(within(unitSelect).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'can (drained)',
+      'g',
+      'oz',
+      'lb',
+      'kg',
+    ]);
+
+    // 60 g of a 120 g can at 100 kcal → 50 kcal
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '60' } });
+    fireEvent.change(within(form).getByLabelText('Unit'), { target: { value: 'g' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    expect(screen.getByText('1850 kcal left')).toBeInTheDocument();
+  });
+
+  it('editing an entry uses its own snapshot after the library anchor changes', async () => {
+    renderApp(new FakeRepository());
+    const lunch = await screen.findByRole('region', { name: 'Lunch' });
+
+    // Log 45 g of a food defined as 1 serving = 100 g, 200 kcal
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Oats' } });
+    fireEvent.change(within(form).getByLabelText(/Equals/), { target: { value: '100' } });
+    fireEvent.change(within(form).getByLabelText('Serving unit'), { target: { value: 'g' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '200' } });
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '45' } });
+    fireEvent.change(within(form).getByLabelText('Unit'), { target: { value: 'g' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    expect(screen.getByText('1910 kcal left')).toBeInTheDocument();
+
+    // Remove the library food's equivalence entirely
+    fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
+    fireEvent.click(await screen.findByText('Edit'));
+    const foodForm = screen.getByRole('form', { name: 'Edit library food' });
+    fireEvent.change(within(foodForm).getByLabelText(/Equals/), { target: { value: '' } });
+    fireEvent.change(within(foodForm).getByLabelText('Serving unit'), { target: { value: '' } });
+    fireEvent.click(within(foodForm).getByText('Save changes'));
+    await waitFor(() =>
+      expect(screen.queryByRole('form', { name: 'Edit library food' })).toBeNull(),
+    );
+
+    // The entry still edits in grams from its own snapshot
+    fireEvent.click(screen.getByRole('link', { name: 'Log' }));
+    fireEvent.click(await screen.findByText('Oats'));
+    form = screen.getByRole('form', { name: 'Edit food entry' });
+    expect(within(form).getByLabelText('Amount')).toHaveValue('45');
+    expect(within(form).getByLabelText('Unit')).toHaveValue('g');
+
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '90' } });
+    fireEvent.click(within(form).getByText('Save changes'));
+    expect(await screen.findByText('1820 kcal left')).toBeInTheDocument();
   });
 });
 

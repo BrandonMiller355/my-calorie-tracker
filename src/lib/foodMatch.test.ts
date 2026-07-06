@@ -2,7 +2,17 @@ import { findFoodByName, matchFoods, normalizeFoodName } from './foodMatch';
 import type { LibraryFood } from '../types';
 
 function food(id: string, name: string, description?: string): LibraryFood {
-  return { id, name, description, calories: 100, carbs: 10, protein: 5, fat: 3, source: 'manual' };
+  return {
+    id,
+    name,
+    description,
+    servingLabel: 'serving',
+    calories: 100,
+    carbs: 10,
+    protein: 5,
+    fat: 3,
+    source: 'manual',
+  };
 }
 
 describe('normalizeFoodName', () => {

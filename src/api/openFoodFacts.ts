@@ -1,4 +1,4 @@
-import type { FoodSearchResult } from '../types';
+import { DEFAULT_SERVING_LABEL, type FoodSearchResult, type ServingSize } from '../types';
 
 const SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
 const PAGE_SIZE = 20;
@@ -18,7 +18,10 @@ export interface OffProduct {
   code?: string;
   product_name?: string;
   brands?: string;
-  serving_size?: string;
+  serving_quantity?: number | string;
+  serving_quantity_unit?: string;
+  /** '100g' or '100ml' — what the _100g nutrient fields are actually per */
+  nutrition_data_per?: string;
   nutriments?: OffNutriments;
 }
 
@@ -30,9 +33,25 @@ function toNum(value: number | string | undefined): number | undefined {
 }
 
 /**
- * Map an OFF product to a search result. Prefers per-serving nutrients;
- * falls back to per-100g. Missing nutrients stay undefined — never 0.
- * Returns null for unusable products (no name).
+ * Serving equivalence for a product whose nutrients are per serving. OFF's
+ * serving_quantity is in grams by convention when the unit is blank; only
+ * g/ml are trusted — anything else degrades to no equivalence rather than
+ * risking a wrong conversion.
+ */
+function servingEquivalence(p: OffProduct): ServingSize | undefined {
+  const amount = toNum(p.serving_quantity);
+  if (amount === undefined || amount <= 0) return undefined;
+  const unit = p.serving_quantity_unit?.trim().toLowerCase() || 'g';
+  if (unit !== 'g' && unit !== 'ml') return undefined;
+  return { amount, unit };
+}
+
+/**
+ * Map an OFF product to a search result. Prefers per-serving nutrients
+ * (equivalence from serving_quantity when parseable); falls back to per-100g
+ * treated as one serving of 100 g — or 100 ml when nutrition_data_per says
+ * so. Missing nutrients stay undefined — never 0. Returns null for unusable
+ * products (no name).
  */
 export function mapProduct(p: OffProduct, index: number): FoodSearchResult | null {
   const name = p.product_name?.trim();
@@ -55,13 +74,16 @@ export function mapProduct(p: OffProduct, index: number): FoodSearchResult | nul
         protein: toNum(n.proteins_100g),
         fat: toNum(n.fat_100g),
       };
-  const servingDesc = hasServingData ? p.serving_size?.trim() || '1 serving' : '100 g';
+  const servingSize: ServingSize | undefined = hasServingData
+    ? servingEquivalence(p)
+    : { amount: 100, unit: p.nutrition_data_per?.trim() === '100ml' ? 'ml' : 'g' };
 
   return {
     id: p.code || `result-${index}`,
     name,
     brand: p.brands?.trim() || undefined,
-    servingDesc,
+    servingLabel: DEFAULT_SERVING_LABEL,
+    servingSize,
     ...nutrients,
   };
 }
@@ -128,7 +150,8 @@ export async function searchFoods(
     action: 'process',
     json: '1',
     page_size: String(PAGE_SIZE),
-    fields: 'code,product_name,brands,serving_size,nutriments',
+    fields:
+      'code,product_name,brands,serving_quantity,serving_quantity_unit,nutrition_data_per,nutriments',
   });
   const url = `${SEARCH_URL}?${params}`;
 

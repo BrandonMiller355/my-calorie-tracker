@@ -48,7 +48,10 @@ const entry: FoodEntry = {
   date: '2026-07-05',
   meal: 'breakfast',
   name: 'Oatmeal',
-  servingDesc: '1 cup',
+  amount: 1.5,
+  unit: 'cup',
+  servingLabel: 'serving',
+  servingSize: { amount: 1, unit: 'cup' },
   quantity: 1.5,
   calories: 300,
   carbs: 54,
@@ -62,7 +65,11 @@ const entryRow = {
   date: '2026-07-05',
   meal: 'breakfast',
   name: 'Oatmeal',
-  serving_desc: '1 cup',
+  amount: 1.5,
+  unit: 'cup',
+  serving_label: 'serving',
+  serving_size_amount: 1,
+  serving_size_unit: 'cup',
   quantity: 1.5,
   calories: 300,
   carbs: 54,
@@ -76,7 +83,7 @@ const food: LibraryFood = {
   id: 'food-1',
   name: 'PB&J',
   description: '15g jelly, 16g pbfit, 2 sara lee slices',
-  servingDesc: '1 sandwich',
+  servingLabel: 'sandwich',
   calories: 380,
   carbs: 45,
   protein: 14,
@@ -88,7 +95,9 @@ const foodRow = {
   id: 'food-1',
   name: 'PB&J',
   description: '15g jelly, 16g pbfit, 2 sara lee slices',
-  serving_desc: '1 sandwich',
+  serving_label: 'sandwich',
+  serving_size_amount: null,
+  serving_size_unit: null,
   calories: 380,
   carbs: 45,
   protein: 14,
@@ -109,21 +118,25 @@ describe('SupabaseRepository', () => {
     expect(entries).toEqual([entry]);
   });
 
-  it('maps a null serving_desc to an absent servingDesc', async () => {
-    const { client } = fakeClient({ data: [{ ...entryRow, serving_desc: null }] });
+  it('maps null serving size columns to an absent servingSize', async () => {
+    const { client } = fakeClient({
+      data: [{ ...entryRow, serving_size_amount: null, serving_size_unit: null }],
+    });
     const [mapped] = await new SupabaseRepository(client).getEntriesByDate('2026-07-05');
-    expect(mapped.servingDesc).toBeUndefined();
+    expect(mapped.servingSize).toBeUndefined();
   });
 
-  it('addEntry inserts a snake_case row, mapping missing servingDesc to null', async () => {
+  it('addEntry inserts a snake_case row, mapping a missing servingSize to nulls', async () => {
     const { client, calls } = fakeClient();
-    const { servingDesc: _omitted, ...withoutServing } = entry;
-    await new SupabaseRepository(client).addEntry(withoutServing);
+    const { servingSize: _omitted, ...withoutSize } = entry;
+    await new SupabaseRepository(client).addEntry({ ...withoutSize, unit: 'serving' });
 
     expect(calls[0]).toEqual({ method: 'from', args: ['food_entries'] });
     expect(calls[1]).toEqual({
       method: 'insert',
-      args: [{ ...entryRow, serving_desc: null }],
+      args: [
+        { ...entryRow, unit: 'serving', serving_size_amount: null, serving_size_unit: null },
+      ],
     });
   });
 
@@ -226,12 +239,12 @@ describe('SupabaseRepository', () => {
 
   it('addFood inserts a snake_case row, mapping missing optionals to null', async () => {
     const { client, calls } = fakeClient();
-    const { description: _d, servingDesc: _s, ...bare } = food;
+    const { description: _d, ...bare } = food;
     await new SupabaseRepository(client).addFood(bare);
 
     expect(calls).toEqual([
       { method: 'from', args: ['foods'] },
-      { method: 'insert', args: [{ ...foodRow, description: null, serving_desc: null }] },
+      { method: 'insert', args: [{ ...foodRow, description: null }] },
     ]);
   });
 

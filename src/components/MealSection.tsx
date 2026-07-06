@@ -1,4 +1,5 @@
 import { entryTotals } from '../lib/totals';
+import { unitLabel } from '../lib/units';
 import { MEAL_LABELS, type FoodEntry, type Meal } from '../types';
 
 export function MealSection({
@@ -33,8 +34,11 @@ export function MealSection({
                 <button className="entry-main" onClick={() => onEdit(entry)}>
                   <span className="entry-name">
                     {entry.name}
-                    {entry.quantity !== 1 && (
-                      <span className="entry-qty"> ×{entry.quantity}</span>
+                    {!(entry.amount === 1 && entry.unit === entry.servingLabel) && (
+                      <span className="entry-qty">
+                        {' '}
+                        · {entry.amount} {unitLabel(entry.unit)}
+                      </span>
                     )}
                   </span>
                   <span className="entry-macros">

@@ -561,6 +561,44 @@ body {
   gap: 10px;
 }
 
+/* Logged amount + unit picker side by side */
+.amount-unit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 10px;
+}
+
+/* Serving definition for a new food: name, equivalence amount, unit */
+.serving-def-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+/* Live "what this entry contributes" readout for known foods */
+.entry-nutrition-summary {
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.entry-computed {
+  margin: 0;
+  font-weight: 600;
+}
+
+.entry-per-serving {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.per-serving-hint {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+
 label.flagged input {
   border-color: var(--danger);
   background: var(--danger-soft);

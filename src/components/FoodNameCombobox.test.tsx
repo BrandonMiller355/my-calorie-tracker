@@ -6,6 +6,7 @@ const yogurt: LibraryFood = {
   id: 'f1',
   name: 'Greek yogurt',
   description: 'Fage 2%',
+  servingLabel: 'serving',
   calories: 120,
   carbs: 8,
   protein: 15,
@@ -16,6 +17,7 @@ const yogurt: LibraryFood = {
 const banana: LibraryFood = {
   id: 'f2',
   name: 'Banana',
+  servingLabel: 'serving',
   calories: 105,
   carbs: 27,
   protein: 1,

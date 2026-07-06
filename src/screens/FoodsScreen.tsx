@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { findFoodByName } from '../lib/foodMatch';
+import { MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
   validateFoodForm,
   type FoodFormErrors,
   type FoodFormValues,
 } from '../lib/validation';
 import { useAppState } from '../state/AppState';
-import type { LibraryFood } from '../types';
+import { DEFAULT_SERVING_LABEL, type LibraryFood } from '../types';
 
 type FormMode = { kind: 'create' } | { kind: 'edit'; food: LibraryFood } | null;
 
@@ -20,12 +21,23 @@ function toFormValues(food?: LibraryFood): FoodFormValues {
   return {
     name: food?.name ?? '',
     description: food?.description ?? '',
-    servingDesc: food?.servingDesc ?? '',
+    servingLabel: food?.servingLabel ?? '',
+    servingSizeAmount: food?.servingSize ? String(food.servingSize.amount) : '',
+    servingSizeUnit: food?.servingSize?.unit ?? '',
     calories: food ? String(food.calories) : '',
     carbs: food ? String(food.carbs) : '',
     protein: food ? String(food.protein) : '',
     fat: food ? String(food.fat) : '',
   };
+}
+
+/** "1 can (drained) = 120 g", "per bowl", or '' for a plain unqualified serving. */
+function describeAnchor(food: LibraryFood): string {
+  if (food.servingSize) {
+    const { amount, unit } = food.servingSize;
+    return `1 ${food.servingLabel} = ${amount} ${unitLabel(unit)}`;
+  }
+  return food.servingLabel === DEFAULT_SERVING_LABEL ? '' : `per ${food.servingLabel}`;
 }
 
 function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => void }) {
@@ -34,6 +46,10 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
   const [errors, setErrors] = useState<FoodFormErrors>({});
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Only close on backdrop clicks that also started on the backdrop, so
+  // dragging a text selection from a field past the dialog edge doesn't
+  // dismiss the form on mouseup.
+  const [backdropMouseDown, setBackdropMouseDown] = useState(false);
 
   function setField(key: keyof FoodFormValues, value: string) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -70,7 +86,13 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => setBackdropMouseDown(e.target === e.currentTarget)}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && backdropMouseDown) onClose();
+      }}
+    >
       <form
         className="entry-form"
         onClick={(e) => e.stopPropagation()}
@@ -94,14 +116,46 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
           />
         </label>
 
-        <label>
-          Serving description (optional)
-          <input
-            value={values.servingDesc}
-            onChange={(e) => setField('servingDesc', e.target.value)}
-            placeholder="e.g. 1 cup"
-          />
-        </label>
+        <div className="serving-def">
+          <div className="serving-def-row">
+            <label>
+              Serving name
+              <input
+                value={values.servingLabel}
+                onChange={(e) => setField('servingLabel', e.target.value)}
+                placeholder={DEFAULT_SERVING_LABEL}
+              />
+            </label>
+            <label>
+              Equals (optional)
+              <input
+                inputMode="decimal"
+                value={values.servingSizeAmount}
+                onChange={(e) => setField('servingSizeAmount', e.target.value)}
+                placeholder="e.g. 120"
+              />
+            </label>
+            <label>
+              Serving unit
+              <select
+                value={values.servingSizeUnit}
+                onChange={(e) => setField('servingSizeUnit', e.target.value)}
+              >
+                <option value="">—</option>
+                {MEASURE_UNITS.map((u) => (
+                  <option key={u} value={u}>
+                    {UNIT_LABELS[u]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {(errors.servingLabel || errors.servingSizeAmount || errors.servingSizeUnit) && (
+            <span className="field-error">
+              {errors.servingLabel ?? errors.servingSizeAmount ?? errors.servingSizeUnit}
+            </span>
+          )}
+        </div>
 
         <label>
           Calories (kcal)
@@ -194,7 +248,7 @@ export function FoodsScreen() {
                 {food.description && <span className="result-brand">{food.description}</span>}
                 <span className="result-macros">
                   {food.calories} kcal · F {food.fat} g · C {food.carbs} g · P {food.protein} g
-                  {food.servingDesc ? ` · ${food.servingDesc}` : ''}
+                  {describeAnchor(food) ? ` · ${describeAnchor(food)}` : ''}
                 </span>
               </div>
               <div className="food-row-actions">

@@ -6,17 +6,45 @@ import {
   type LibraryFood,
   type Meal,
   type MealSuggestions,
+  type MeasureUnit,
+  type ServingAnchor,
   type WeekDeficitDay,
 } from '../types';
 import type { StorageRepository } from './StorageRepository';
 
+/** Serving anchor columns shared by food_entries and foods rows. */
+interface AnchorColumns {
+  serving_label: string;
+  serving_size_amount: number | null;
+  serving_size_unit: MeasureUnit | null;
+}
+
+function toAnchorColumns(anchor: ServingAnchor): AnchorColumns {
+  return {
+    serving_label: anchor.servingLabel,
+    serving_size_amount: anchor.servingSize?.amount ?? null,
+    serving_size_unit: anchor.servingSize?.unit ?? null,
+  };
+}
+
+function fromAnchorColumns(row: AnchorColumns): ServingAnchor {
+  return {
+    servingLabel: row.serving_label,
+    servingSize:
+      row.serving_size_amount !== null && row.serving_size_unit !== null
+        ? { amount: row.serving_size_amount, unit: row.serving_size_unit }
+        : undefined,
+  };
+}
+
 /** Row shape of the food_entries table (snake_case, per supabase/schema.sql). */
-interface FoodEntryRow {
+interface FoodEntryRow extends AnchorColumns {
   id: string;
   date: string;
   meal: Meal;
   name: string;
-  serving_desc: string | null;
+  amount: number;
+  unit: string;
   quantity: number;
   calories: number;
   carbs: number;
@@ -32,7 +60,9 @@ function toRow(entry: FoodEntry): FoodEntryRow {
     date: entry.date,
     meal: entry.meal,
     name: entry.name,
-    serving_desc: entry.servingDesc ?? null,
+    amount: entry.amount,
+    unit: entry.unit,
+    ...toAnchorColumns(entry),
     quantity: entry.quantity,
     calories: entry.calories,
     carbs: entry.carbs,
@@ -49,7 +79,9 @@ function fromRow(row: FoodEntryRow): FoodEntry {
     date: row.date,
     meal: row.meal,
     name: row.name,
-    servingDesc: row.serving_desc ?? undefined,
+    amount: row.amount,
+    unit: row.unit,
+    ...fromAnchorColumns(row),
     quantity: row.quantity,
     calories: row.calories,
     carbs: row.carbs,
@@ -61,11 +93,10 @@ function fromRow(row: FoodEntryRow): FoodEntry {
 }
 
 /** Row shape of the foods table; also what meal_suggestions() returns per food. */
-interface FoodRow {
+interface FoodRow extends AnchorColumns {
   id: string;
   name: string;
   description: string | null;
-  serving_desc: string | null;
   calories: number;
   carbs: number;
   protein: number;
@@ -78,7 +109,7 @@ function toFoodRow(food: LibraryFood): FoodRow {
     id: food.id,
     name: food.name,
     description: food.description ?? null,
-    serving_desc: food.servingDesc ?? null,
+    ...toAnchorColumns(food),
     calories: food.calories,
     carbs: food.carbs,
     protein: food.protein,
@@ -92,7 +123,7 @@ function fromFoodRow(row: FoodRow): LibraryFood {
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
-    servingDesc: row.serving_desc ?? undefined,
+    ...fromAnchorColumns(row),
     calories: row.calories,
     carbs: row.carbs,
     protein: row.protein,
