@@ -20,5 +20,5 @@
 
 ## 4. Verify on device
 
-- [ ] 4.1 Run `npm run build` and tests; deploy to GitHub Pages
-- [ ] 4.2 On an Android phone: scan a known product end-to-end into the add-entry form; confirm not-found fallback with an obscure barcode; confirm camera indicator turns off after cancel/detection
+- [x] 4.1 Run `npm run build` and tests; deploy to GitHub Pages
+- [x] 4.2 On an Android phone: scan a known product end-to-end into the add-entry form; confirm not-found fallback with an obscure barcode; confirm camera indicator turns off after cancel/detection
