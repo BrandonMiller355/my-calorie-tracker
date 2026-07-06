@@ -1,4 +1,4 @@
-import { addDays, toDateKey, todayKey } from './date';
+import { addDays, startOfWeek, toDateKey, todayKey } from './date';
 
 describe('toDateKey', () => {
   it('formats local dates with zero padding', () => {
@@ -27,6 +27,24 @@ describe('addDays', () => {
 
   it('handles leap years', () => {
     expect(addDays('2028-02-28', 1)).toBe('2028-02-29');
+  });
+});
+
+describe('startOfWeek', () => {
+  it('returns the same date when given a Monday', () => {
+    expect(startOfWeek('2026-07-06')).toBe('2026-07-06');
+  });
+
+  it('returns the prior Monday when given a Sunday', () => {
+    expect(startOfWeek('2026-07-05')).toBe('2026-06-29');
+  });
+
+  it('returns the Monday of a mid-week date', () => {
+    expect(startOfWeek('2026-07-08')).toBe('2026-07-06');
+  });
+
+  it('crosses a year boundary', () => {
+    expect(startOfWeek('2026-01-01')).toBe('2025-12-29');
   });
 });
 

@@ -1,4 +1,4 @@
-import type { FoodEntry, Goals, LibraryFood, Meal, MealSuggestions } from '../types';
+import type { FoodEntry, Goals, LibraryFood, Meal, MealSuggestions, WeekDeficitDay } from '../types';
 
 /**
  * All persistence goes through this interface. UI code must never touch
@@ -27,4 +27,13 @@ export interface StorageRepository {
   archiveFood(id: string): Promise<void>;
   /** Recent and most-used foods for a meal, computed server-side. */
   getMealSuggestions(meal: Meal): Promise<MealSuggestions>;
+  /**
+   * Per-date consumed calories, effective calorie-burn goal (day override
+   * falling back to the default), and whether any entries exist, for every
+   * date in `[from, through]` inclusive, computed server-side in one request.
+   */
+  getWeekDeficitSummary(from: string, through: string): Promise<WeekDeficitDay[]>;
+  /** null when the user has never set a weekly deficit goal. */
+  getWeeklyDeficitGoal(): Promise<number | null>;
+  saveWeeklyDeficitGoal(goal: number): Promise<void>;
 }

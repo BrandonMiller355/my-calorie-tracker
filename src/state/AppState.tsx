@@ -8,8 +8,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { todayKey } from '../lib/date';
+import { startOfWeek, todayKey } from '../lib/date';
 import { findFoodByName } from '../lib/foodMatch';
+import { computeWeeklyDeficit } from '../lib/weeklyDeficit';
 import type { StorageRepository } from '../storage';
 import {
   DEFAULT_GOALS,
@@ -18,6 +19,7 @@ import {
   type LibraryFood,
   type Meal,
   type MealSuggestions,
+  type WeekDeficitDay,
 } from '../types';
 
 interface AppState {
@@ -33,6 +35,11 @@ interface AppState {
   foods: LibraryFood[];
   /** true when loading entries or goals from the backend failed */
   loadFailed: boolean;
+  /** null when the user has never set a weekly deficit goal */
+  weeklyDeficitGoal: number | null;
+  /** Per-day breakdown from that week's Monday through `date`, inclusive */
+  weekSummary: WeekDeficitDay[];
+  weekSummaryLoading: boolean;
 }
 
 type Action =
@@ -50,13 +57,22 @@ type Action =
   | { type: 'food-added'; food: LibraryFood }
   | { type: 'food-updated'; food: LibraryFood }
   | { type: 'food-archived'; id: string }
+  | { type: 'weekly-deficit-goal-loaded'; goal: number | null }
+  | { type: 'weekly-deficit-goal-saved'; goal: number }
+  | { type: 'week-summary-loaded'; date: string; days: WeekDeficitDay[] }
   | { type: 'load-failed' }
   | { type: 'retry-load' };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'set-date':
-      return { ...state, date: action.date, entriesLoading: true, dayGoalOverride: null };
+      return {
+        ...state,
+        date: action.date,
+        entriesLoading: true,
+        dayGoalOverride: null,
+        weekSummaryLoading: true,
+      };
     case 'entries-loaded':
       // Ignore loads for a date the user has already navigated away from
       if (action.date !== state.date) return state;
@@ -97,10 +113,18 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'food-archived':
       return { ...state, foods: state.foods.filter((f) => f.id !== action.id) };
+    case 'weekly-deficit-goal-loaded':
+      return { ...state, weeklyDeficitGoal: action.goal };
+    case 'weekly-deficit-goal-saved':
+      return { ...state, weeklyDeficitGoal: action.goal };
+    case 'week-summary-loaded':
+      // Ignore loads for a date the user has already navigated away from
+      if (action.date !== state.date) return state;
+      return { ...state, weekSummary: action.days, weekSummaryLoading: false };
     case 'load-failed':
-      return { ...state, loadFailed: true, entriesLoading: false };
+      return { ...state, loadFailed: true, entriesLoading: false, weekSummaryLoading: false };
     case 'retry-load':
-      return { ...state, loadFailed: false, entriesLoading: true };
+      return { ...state, loadFailed: false, entriesLoading: true, weekSummaryLoading: true };
   }
 }
 
@@ -115,6 +139,14 @@ export interface AppContextValue extends AppState {
   goals: Goals;
   /** true when `date` has its own override rather than using defaultGoals */
   dayGoalIsOverridden: boolean;
+  /** Sum of (calorie burn goal - consumed) from that week's Monday through `date` */
+  weeklyDeficitToDate: number;
+  /**
+   * true when a day strictly before `date` in `weekSummary` has zero entries,
+   * or `date` itself does when `date` is not today (today's own emptiness
+   * doesn't count, since today isn't over yet).
+   */
+  weeklyDeficitMissingDays: boolean;
   setDate: (date: string) => void;
   /** Re-runs the failed goal/entry loads after loadFailed */
   retryLoad: () => void;
@@ -130,6 +162,7 @@ export interface AppContextValue extends AppState {
   updateFood: (food: LibraryFood) => Promise<void>;
   archiveFood: (id: string) => Promise<void>;
   getMealSuggestions: (meal: Meal) => Promise<MealSuggestions>;
+  saveWeeklyDeficitGoal: (goal: number) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -150,6 +183,9 @@ export function AppProvider({
     dayGoalOverride: null,
     foods: [],
     loadFailed: false,
+    weeklyDeficitGoal: null,
+    weekSummary: [],
+    weekSummaryLoading: true,
   });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -188,6 +224,36 @@ export function AppProvider({
     repository.getGoalsForDate(state.date).then(
       (goals) => {
         if (!cancelled) dispatch({ type: 'day-goal-loaded', date: state.date, goals });
+      },
+      () => {
+        if (!cancelled) dispatch({ type: 'load-failed' });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [repository, state.date, reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    repository.getWeeklyDeficitGoal().then(
+      (goal) => {
+        if (!cancelled) dispatch({ type: 'weekly-deficit-goal-loaded', goal });
+      },
+      () => {
+        if (!cancelled) dispatch({ type: 'load-failed' });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [repository, reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    repository.getWeekDeficitSummary(startOfWeek(state.date), state.date).then(
+      (days) => {
+        if (!cancelled) dispatch({ type: 'week-summary-loaded', date: state.date, days });
       },
       () => {
         if (!cancelled) dispatch({ type: 'load-failed' });
@@ -326,14 +392,27 @@ export function AppProvider({
     [repository],
   );
 
+  const saveWeeklyDeficitGoal = useCallback(
+    async (goal: number) => {
+      await repository.saveWeeklyDeficitGoal(goal);
+      dispatch({ type: 'weekly-deficit-goal-saved', goal });
+    },
+    [repository],
+  );
+
   const goals = state.dayGoalOverride ?? state.defaultGoals;
   const dayGoalIsOverridden = state.dayGoalOverride !== null;
+
+  const { deficit: weeklyDeficitToDate, hasMissingDays: weeklyDeficitMissingDays } =
+    computeWeeklyDeficit(state.weekSummary, state.date, todayKey());
 
   const value = useMemo<AppContextValue>(
     () => ({
       ...state,
       goals,
       dayGoalIsOverridden,
+      weeklyDeficitToDate,
+      weeklyDeficitMissingDays,
       setDate,
       retryLoad,
       addEntry,
@@ -346,11 +425,14 @@ export function AppProvider({
       updateFood,
       archiveFood,
       getMealSuggestions,
+      saveWeeklyDeficitGoal,
     }),
     [
       state,
       goals,
       dayGoalIsOverridden,
+      weeklyDeficitToDate,
+      weeklyDeficitMissingDays,
       setDate,
       retryLoad,
       addEntry,
@@ -363,6 +445,7 @@ export function AppProvider({
       updateFood,
       archiveFood,
       getMealSuggestions,
+      saveWeeklyDeficitGoal,
     ],
   );
 

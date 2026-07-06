@@ -5,6 +5,7 @@ import { DayGoalEditor } from '../components/DayGoalEditor';
 import { EntryForm } from '../components/EntryForm';
 import { MealSection } from '../components/MealSection';
 import { Summary } from '../components/Summary';
+import { WeeklyDeficit } from '../components/WeeklyDeficit';
 import { sumTotals } from '../lib/totals';
 import { useAppState } from '../state/AppState';
 import { MEALS, type FoodEntry, type FoodSearchResult, type Meal } from '../types';
@@ -36,6 +37,9 @@ export function DayLogScreen() {
     deleteEntry,
     saveDayGoals,
     clearDayGoals,
+    weeklyDeficitToDate,
+    weeklyDeficitGoal,
+    weeklyDeficitMissingDays,
   } = useAppState();
   const [form, setForm] = useState<FormMode>(null);
   const [deleteFailed, setDeleteFailed] = useState(false);
@@ -74,6 +78,11 @@ export function DayLogScreen() {
     <div className="day-log">
       <DateNav date={date} onChange={setDate} />
       <Summary totals={totals} goals={goals} goalsAreDefault={goalsAreDefault} />
+      <WeeklyDeficit
+        deficit={weeklyDeficitToDate}
+        goal={weeklyDeficitGoal}
+        hasMissingDays={weeklyDeficitMissingDays}
+      />
       <DayGoalEditor
         key={date}
         date={date}

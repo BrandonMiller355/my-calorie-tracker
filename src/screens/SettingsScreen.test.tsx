@@ -4,7 +4,7 @@ import { AppProvider } from '../state/AppState';
 import { AuthProvider } from '../state/AuthProvider';
 import { ThemeProvider } from '../state/ThemeProvider';
 import type { StorageRepository } from '../storage';
-import type { FoodEntry, Goals, LibraryFood, MealSuggestions } from '../types';
+import type { FoodEntry, Goals, LibraryFood, MealSuggestions, WeekDeficitDay } from '../types';
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
@@ -41,6 +41,16 @@ class FakeRepository implements StorageRepository {
   async getMealSuggestions(): Promise<MealSuggestions> {
     return { recent: [], mostUsed: [] };
   }
+  async getWeekDeficitSummary(): Promise<WeekDeficitDay[]> {
+    return [];
+  }
+  weeklyDeficitGoal: number | null = null;
+  async getWeeklyDeficitGoal(): Promise<number | null> {
+    return this.weeklyDeficitGoal;
+  }
+  async saveWeeklyDeficitGoal(goal: number): Promise<void> {
+    this.weeklyDeficitGoal = goal;
+  }
 }
 
 function renderSettings() {
@@ -75,5 +85,47 @@ describe('SettingsScreen theme toggle', () => {
 
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(localStorage.getItem('cal-tracker:theme')).toBe('dark');
+  });
+});
+
+describe('SettingsScreen goal labeling', () => {
+  it('labels the daily calorie goal field as "Calorie burn"', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Default daily goal' });
+    expect(screen.getByLabelText('Calorie burn (kcal)')).toBeInTheDocument();
+  });
+});
+
+describe('SettingsScreen weekly deficit goal', () => {
+  it('starts blank when no weekly deficit goal has been set', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Weekly deficit goal' });
+    expect(screen.getByLabelText('Weekly deficit goal (kcal)')).toHaveValue('');
+  });
+
+  it('saves a valid weekly deficit goal', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Weekly deficit goal' });
+
+    fireEvent.change(screen.getByLabelText('Weekly deficit goal (kcal)'), {
+      target: { value: '3500' },
+    });
+    fireEvent.click(screen.getByText('Save weekly goal'));
+
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+  });
+
+  it('rejects a non-positive weekly deficit goal', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Weekly deficit goal' });
+
+    fireEvent.change(screen.getByLabelText('Weekly deficit goal (kcal)'), {
+      target: { value: '0' },
+    });
+    fireEvent.click(screen.getByText('Save weekly goal'));
+
+    expect(
+      await screen.findByText('Weekly deficit goal must be a number greater than 0.'),
+    ).toBeInTheDocument();
   });
 });

@@ -101,8 +101,55 @@ describe('searchFoods', () => {
     expect(url).toContain('page_size=20');
   });
 
-  it('throws on HTTP errors', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('oops', { status: 500 }));
-    await expect(searchFoods('apple')).rejects.toThrow('HTTP 500');
+  it('throws immediately on non-retryable HTTP errors', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('oops', { status: 400 }));
+    await expect(searchFoods('apple')).rejects.toThrow('HTTP 400');
+  });
+
+  it('retries transient 5xx errors and succeeds once OFF recovers', async () => {
+    vi.useFakeTimers();
+    const products: OffProduct[] = [
+      { code: '1', product_name: 'Apple', nutriments: { 'energy-kcal_100g': 52 } },
+    ];
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ products }), { status: 200 }));
+
+    const promise = searchFoods('apple');
+    await vi.runAllTimersAsync();
+    const results = await promise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(results[0].name).toBe('Apple');
+    vi.useRealTimers();
+  });
+
+  it('retries a network failure ("Failed to fetch") and gives up after max attempts', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const promise = searchFoods('apple');
+    // Prevent an unhandled-rejection warning while timers are advanced below.
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Failed to fetch');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('does not retry once the request is aborted', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      const err = new DOMException('Aborted', 'AbortError');
+      return Promise.reject(err);
+    });
+
+    controller.abort();
+    await expect(searchFoods('apple', { signal: controller.signal })).rejects.toThrow('Aborted');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

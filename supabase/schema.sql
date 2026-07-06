@@ -27,7 +27,11 @@ create table goals (
   calories numeric not null,
   carbs numeric not null,
   protein numeric not null,
-  fat numeric not null
+  fat numeric not null,
+  -- Target weekly calorie deficit (kcal); null means the user hasn't set one.
+  -- Unlike the other columns this has no per-day override — it's a single
+  -- current value applied uniformly to any week viewed, past or present.
+  weekly_deficit_goal numeric
 );
 
 -- Per-day overrides of the default in `goals`. A date with no row here falls
@@ -164,4 +168,41 @@ as $$
   from ranked r
   join foods f on f.id = r.food_id
   order by case r.suggestion_group when 'recent' then 0 else 1 end, r.ord;
+$$;
+
+-- Per-date consumed calories, effective calorie-burn goal (daily_goals
+-- override falling back to the default goals row), and whether any entries
+-- exist, for the weekly deficit widget. security invoker (the default), so
+-- RLS on all three tables scopes everything to the calling user. `p_from`/
+-- `p_through` are inclusive YYYY-MM-DD text bounds; the date series is
+-- generated server-side so the widget is a single round trip regardless of
+-- range length.
+create function week_deficit_summary(p_from text, p_through text)
+returns table (
+  date text,
+  consumed_calories numeric,
+  effective_goal_calories numeric,
+  has_entries boolean
+)
+language sql
+stable
+as $$
+  with days as (
+    select generate_series(p_from::date, p_through::date, interval '1 day')::date::text as date
+  ),
+  consumed as (
+    select e.date, sum(e.calories * e.quantity) as total
+    from food_entries e
+    where e.date between p_from and p_through
+    group by e.date
+  )
+  select d.date,
+    coalesce(c.total, 0) as consumed_calories,
+    coalesce(dg.calories, g.calories) as effective_goal_calories,
+    c.date is not null as has_entries
+  from days d
+  left join consumed c on c.date = d.date
+  left join daily_goals dg on dg.date = d.date
+  left join goals g on true
+  order by d.date;
 $$;

@@ -1,7 +1,7 @@
 import type { Goals } from '../types';
 
 export const GOAL_FIELDS: readonly { key: keyof Goals; label: string }[] = [
-  { key: 'calories', label: 'Calories (kcal)' },
+  { key: 'calories', label: 'Calorie burn (kcal)' },
   { key: 'fat', label: 'Fat (g)' },
   { key: 'carbs', label: 'Carbs (g)' },
   { key: 'protein', label: 'Protein (g)' },

@@ -12,7 +12,8 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 ];
 
 export function SettingsScreen() {
-  const { defaultGoals, goalsAreDefault, saveDefaultGoals } = useAppState();
+  const { defaultGoals, goalsAreDefault, saveDefaultGoals, weeklyDeficitGoal, saveWeeklyDeficitGoal } =
+    useAppState();
   const { signOut } = useAuth();
   const { theme, setTheme } = useTheme();
   const [values, setValues] = useState<Record<keyof Goals, string>>(
@@ -20,6 +21,12 @@ export function SettingsScreen() {
   );
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const [weeklyDeficitValue, setWeeklyDeficitValue] = useState(
+    weeklyDeficitGoal === null ? '' : String(weeklyDeficitGoal),
+  );
+  const [weeklyDeficitError, setWeeklyDeficitError] = useState<string | null>(null);
+  const [weeklyDeficitSaved, setWeeklyDeficitSaved] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -37,6 +44,31 @@ export function SettingsScreen() {
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handleWeeklyDeficitSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = weeklyDeficitValue.trim();
+    if (trimmed === '') {
+      setWeeklyDeficitError('Enter a weekly deficit goal, or leave Settings to skip setting one.');
+      return;
+    }
+    const goal = Number(trimmed);
+    if (!Number.isFinite(goal) || goal <= 0) {
+      setWeeklyDeficitError('Weekly deficit goal must be a number greater than 0.');
+      return;
+    }
+    setWeeklyDeficitError(null);
+    try {
+      await saveWeeklyDeficitGoal(goal);
+    } catch {
+      setWeeklyDeficitError(
+        'Couldn’t save your weekly deficit goal — it was not stored. Check your connection and try again.',
+      );
+      return;
+    }
+    setWeeklyDeficitSaved(true);
+    setTimeout(() => setWeeklyDeficitSaved(false), 2000);
   }
 
   return (
@@ -68,6 +100,28 @@ export function SettingsScreen() {
         <button type="submit">Save goals</button>
         {saved && <span className="saved-note">Saved ✓</span>}
       </form>
+
+      <div className="weekly-deficit-section">
+        <h2>Weekly deficit goal</h2>
+        <p className="form-note">
+          Optional target for your running weekly calorie deficit (e.g. 3500 kcal). Leave it blank
+          if you don’t want to track one.
+        </p>
+        <form onSubmit={handleWeeklyDeficitSubmit} className="goals-form">
+          <label>
+            Weekly deficit goal (kcal)
+            <input
+              inputMode="decimal"
+              value={weeklyDeficitValue}
+              placeholder="Not set"
+              onChange={(e) => setWeeklyDeficitValue(e.target.value)}
+            />
+          </label>
+          {weeklyDeficitError && <p className="field-error">{weeklyDeficitError}</p>}
+          <button type="submit">Save weekly goal</button>
+          {weeklyDeficitSaved && <span className="saved-note">Saved ✓</span>}
+        </form>
+      </div>
 
       <div className="appearance-section">
         <h2>Appearance</h2>

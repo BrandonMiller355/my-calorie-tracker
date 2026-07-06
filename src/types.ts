@@ -63,6 +63,16 @@ export const DEFAULT_GOALS: Goals = {
   fat: 65,
 };
 
+/** One date's contribution to a weekly deficit calculation. */
+export interface WeekDeficitDay {
+  /** Local calendar date, YYYY-MM-DD */
+  date: string;
+  consumedCalories: number;
+  /** The day's calorie-burn goal: its own override, else the default. */
+  effectiveGoalCalories: number;
+  hasEntries: boolean;
+}
+
 /** A food found via external search; nutrients may be unknown (undefined, never 0). */
 export interface FoodSearchResult {
   id: string;

@@ -40,6 +40,8 @@ vi.mock('./lib/supabase', () => ({
       };
       return builder;
     },
+    // AppProvider also loads the weekly deficit summary via RPC on mount.
+    rpc: () => Promise.resolve({ data: [], error: null }),
   },
 }));
 

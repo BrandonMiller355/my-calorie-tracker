@@ -17,6 +17,14 @@ export function addDays(dateKey: string, delta: number): string {
   return toDateKey(date);
 }
 
+/** Monday on/before the given date key, staying in local time. */
+export function startOfWeek(dateKey: string): string {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const day = new Date(y, m - 1, d, 12).getDay(); // 0 (Sun) - 6 (Sat)
+  const deltaToMonday = day === 0 ? -6 : 1 - day;
+  return addDays(dateKey, deltaToMonday);
+}
+
 /** Human-friendly label for a date key, e.g. "Fri, Jul 4". */
 export function formatDateKey(dateKey: string): string {
   const [y, m, d] = dateKey.split('-').map(Number);

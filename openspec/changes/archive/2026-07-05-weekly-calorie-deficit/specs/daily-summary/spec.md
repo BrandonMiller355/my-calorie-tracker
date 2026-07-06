@@ -1,20 +1,4 @@
-# daily-summary Specification
-
-## Purpose
-TBD - created by syncing change add-calorie-tracker. Update Purpose after review.
-
-## Requirements
-
-### Requirement: Daily totals
-The system SHALL display, for the selected day, the total calories, carbs (g), protein (g), and fat (g) summed across all entries.
-
-#### Scenario: Totals update on log change
-- **WHEN** an entry is added, edited, or deleted on the selected day
-- **THEN** the displayed totals recompute to match the sum of that day's entries
-
-#### Scenario: Empty day
-- **WHEN** the selected day has no entries
-- **THEN** all totals display as zero
+## MODIFIED Requirements
 
 ### Requirement: Daily goals
 The system SHALL let the user set daily goals for calorie burn, carbs, protein, and fat, persist them, and apply them to every day until changed. The calorie value represents an estimated calorie burn ceiling (typically sourced from an external activity tracker) rather than a fixed diet target, and is labeled "Calorie burn" wherever shown or edited.
@@ -37,10 +21,3 @@ The system SHALL display remaining amounts (goal minus consumed) for calorie bur
 #### Scenario: Over goal
 - **WHEN** the day's consumed calories exceed the calorie burn goal
 - **THEN** the summary shows the overage with a distinct over-goal indication
-
-### Requirement: Day navigation
-The system SHALL allow the user to switch the selected day (previous/next and date picker), defaulting to today.
-
-#### Scenario: Navigate to another day
-- **WHEN** the user navigates to a different date
-- **THEN** the log and summary show that date's entries and totals

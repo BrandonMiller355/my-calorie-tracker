@@ -237,6 +237,44 @@ body {
   margin: 0;
 }
 
+/* Weekly deficit */
+.weekly-deficit {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+
+.weekly-deficit-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.weekly-deficit-value {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.weekly-deficit-unit {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.weekly-deficit-goal {
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.weekly-deficit-disclaimer {
+  font-size: 12px;
+  color: var(--danger);
+  margin: 6px 0 0;
+}
+
 /* Day goal editor */
 .day-goal-editor {
   margin-bottom: 16px;
@@ -714,12 +752,14 @@ label.flagged input {
   margin-left: 10px;
 }
 
-.appearance-section {
+.appearance-section,
+.weekly-deficit-section {
   max-width: 320px;
   margin-top: 24px;
 }
 
-.appearance-section h2 {
+.appearance-section h2,
+.weekly-deficit-section h2 {
   font-size: 16px;
   margin: 0 0 12px;
 }

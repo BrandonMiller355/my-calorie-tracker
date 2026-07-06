@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseRepository } from './SupabaseRepository';
-import type { FoodEntry, Goals, LibraryFood } from '../types';
+import { DEFAULT_GOALS, type FoodEntry, type Goals, type LibraryFood } from '../types';
 
 interface Call {
   method: string;
@@ -275,6 +275,70 @@ describe('SupabaseRepository', () => {
     });
   });
 
+  it('getWeekDeficitSummary calls the RPC with the date range and maps snake_case rows', async () => {
+    const rows = [
+      { date: '2026-06-29', consumed_calories: 1800, effective_goal_calories: 2000, has_entries: true },
+      { date: '2026-06-30', consumed_calories: 0, effective_goal_calories: 2100, has_entries: false },
+    ];
+    const { client, calls } = fakeClient({ data: rows });
+    const summary = await new SupabaseRepository(client).getWeekDeficitSummary(
+      '2026-06-29',
+      '2026-06-30',
+    );
+
+    expect(calls).toEqual([
+      {
+        method: 'rpc',
+        args: ['week_deficit_summary', { p_from: '2026-06-29', p_through: '2026-06-30' }],
+      },
+    ]);
+    expect(summary).toEqual([
+      { date: '2026-06-29', consumedCalories: 1800, effectiveGoalCalories: 2000, hasEntries: true },
+      { date: '2026-06-30', consumedCalories: 0, effectiveGoalCalories: 2100, hasEntries: false },
+    ]);
+  });
+
+  it('getWeeklyDeficitGoal reads the weekly_deficit_goal column and returns null when absent', async () => {
+    const withValue = fakeClient({ data: { weekly_deficit_goal: 3500 } });
+    await expect(
+      new SupabaseRepository(withValue.client).getWeeklyDeficitGoal(),
+    ).resolves.toBe(3500);
+    expect(withValue.calls).toEqual([
+      { method: 'from', args: ['goals'] },
+      { method: 'select', args: ['weekly_deficit_goal'] },
+      { method: 'maybeSingle', args: [] },
+    ]);
+
+    const withoutValue = fakeClient({ data: { weekly_deficit_goal: null } });
+    await expect(
+      new SupabaseRepository(withoutValue.client).getWeeklyDeficitGoal(),
+    ).resolves.toBeNull();
+  });
+
+  it('saveWeeklyDeficitGoal carries existing goal columns through the upsert', async () => {
+    const existing: Goals = { calories: 2200, carbs: 250, protein: 140, fat: 70 };
+    const { client, calls } = fakeClient({ data: existing });
+    await new SupabaseRepository(client).saveWeeklyDeficitGoal(3500);
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['goals'] },
+      { method: 'select', args: ['calories, carbs, protein, fat'] },
+      { method: 'maybeSingle', args: [] },
+      { method: 'from', args: ['goals'] },
+      { method: 'upsert', args: [{ ...existing, weekly_deficit_goal: 3500 }] },
+    ]);
+  });
+
+  it('saveWeeklyDeficitGoal falls back to DEFAULT_GOALS when no goals row exists yet', async () => {
+    const { client, calls } = fakeClient({ data: null });
+    await new SupabaseRepository(client).saveWeeklyDeficitGoal(3500);
+
+    expect(calls[calls.length - 1]).toEqual({
+      method: 'upsert',
+      args: [{ ...DEFAULT_GOALS, weekly_deficit_goal: 3500 }],
+    });
+  });
+
   it.each([
     ['getEntriesByDate', (r: SupabaseRepository) => r.getEntriesByDate('2026-07-05')],
     ['addEntry', (r: SupabaseRepository) => r.addEntry(entry)],
@@ -297,6 +361,12 @@ describe('SupabaseRepository', () => {
     ['updateFood', (r: SupabaseRepository) => r.updateFood(food)],
     ['archiveFood', (r: SupabaseRepository) => r.archiveFood('food-1')],
     ['getMealSuggestions', (r: SupabaseRepository) => r.getMealSuggestions('breakfast')],
+    [
+      'getWeekDeficitSummary',
+      (r: SupabaseRepository) => r.getWeekDeficitSummary('2026-06-29', '2026-07-05'),
+    ],
+    ['getWeeklyDeficitGoal', (r: SupabaseRepository) => r.getWeeklyDeficitGoal()],
+    ['saveWeeklyDeficitGoal', (r: SupabaseRepository) => r.saveWeeklyDeficitGoal(3500)],
   ])('%s throws when Supabase returns an error', async (_name, run) => {
     const { client } = fakeClient({ error: { message: 'permission denied' } });
     await expect(run(new SupabaseRepository(client))).rejects.toThrow(/permission denied/);

@@ -2,14 +2,17 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 import { searchFoods } from './api/openFoodFacts';
+import { addDays } from './lib/date';
 import type { StorageRepository } from './storage';
-import type {
-  FoodEntry,
-  FoodSearchResult,
-  Goals,
-  LibraryFood,
-  Meal,
-  MealSuggestions,
+import {
+  DEFAULT_GOALS,
+  type FoodEntry,
+  type FoodSearchResult,
+  type Goals,
+  type LibraryFood,
+  type Meal,
+  type MealSuggestions,
+  type WeekDeficitDay,
 } from './types';
 
 vi.mock('./api/openFoodFacts', () => ({ searchFoods: vi.fn(async () => []) }));
@@ -22,6 +25,7 @@ class FakeRepository implements StorageRepository {
   private defaultGoals: Goals | null = null;
   private dayGoals = new Map<string, Goals>();
   private foods = new Map<string, LibraryFood>();
+  private weeklyDeficitGoal: number | null = null;
   failReads = false;
   failWrites = false;
 
@@ -118,6 +122,29 @@ class FakeRepository implements StorageRepository {
     const toFood = (id: string) => ({ ...this.foods.get(id)! });
     return { recent: recent.map(toFood), mostUsed: mostUsed.map(toFood) };
   }
+  async getWeekDeficitSummary(from: string, through: string): Promise<WeekDeficitDay[]> {
+    this.assertReads();
+    const days: WeekDeficitDay[] = [];
+    for (let d = from; d <= through; d = addDays(d, 1)) {
+      const dayEntries = [...this.entries.values()].filter((e) => e.date === d);
+      days.push({
+        date: d,
+        consumedCalories: dayEntries.reduce((sum, e) => sum + e.calories * e.quantity, 0),
+        effectiveGoalCalories:
+          this.dayGoals.get(d)?.calories ?? this.defaultGoals?.calories ?? DEFAULT_GOALS.calories,
+        hasEntries: dayEntries.length > 0,
+      });
+    }
+    return days;
+  }
+  async getWeeklyDeficitGoal(): Promise<number | null> {
+    this.assertReads();
+    return this.weeklyDeficitGoal;
+  }
+  async saveWeeklyDeficitGoal(goal: number): Promise<void> {
+    this.assertWrites();
+    this.weeklyDeficitGoal = goal;
+  }
 }
 
 function renderApp(repo: StorageRepository, initialEntries: RouterEntry[] = ['/']) {
@@ -164,7 +191,7 @@ describe('App (spec scenario walkthrough)', () => {
     await screen.findByRole('region', { name: 'Breakfast' });
 
     fireEvent.click(screen.getByText('Set a custom goal for today'));
-    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '1500' } });
+    fireEvent.change(screen.getByLabelText('Calorie burn (kcal)'), { target: { value: '1500' } });
     fireEvent.click(screen.getByText('Save for today'));
 
     expect(await screen.findByText('1500 kcal left')).toBeInTheDocument();

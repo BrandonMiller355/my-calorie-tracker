@@ -66,6 +66,58 @@ export function mapProduct(p: OffProduct, index: number): FoodSearchResult | nul
   };
 }
 
+// OFF intermittently 503s (and error responses sometimes omit CORS headers,
+// which surfaces to callers as a generic "Failed to fetch" network error
+// rather than a visible status). Retrying a couple of times clears most of these.
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 300;
+
+class RetryableError extends Error {}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
+}
+
+async function attemptSearch(url: string, signal?: AbortSignal): Promise<FoodSearchResult[]> {
+  let res: Response;
+  try {
+    res = await fetch(url, { signal });
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    throw new RetryableError(err instanceof Error ? err.message : 'Network error');
+  }
+
+  if (!res.ok) {
+    const message = `Food search failed (HTTP ${res.status})`;
+    if (res.status === 429 || res.status >= 500) throw new RetryableError(message);
+    throw new Error(message);
+  }
+
+  const data: { products?: OffProduct[] } = await res.json();
+  return (data.products ?? [])
+    .map((p, i) => mapProduct(p, i))
+    .filter((r): r is FoodSearchResult => r !== null)
+    .slice(0, PAGE_SIZE);
+}
+
 export async function searchFoods(
   query: string,
   options: { signal?: AbortSignal } = {},
@@ -78,13 +130,14 @@ export async function searchFoods(
     page_size: String(PAGE_SIZE),
     fields: 'code,product_name,brands,serving_size,nutriments',
   });
+  const url = `${SEARCH_URL}?${params}`;
 
-  const res = await fetch(`${SEARCH_URL}?${params}`, { signal: options.signal });
-  if (!res.ok) throw new Error(`Food search failed (HTTP ${res.status})`);
-
-  const data: { products?: OffProduct[] } = await res.json();
-  return (data.products ?? [])
-    .map((p, i) => mapProduct(p, i))
-    .filter((r): r is FoodSearchResult => r !== null)
-    .slice(0, PAGE_SIZE);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await attemptSearch(url, options.signal);
+    } catch (err) {
+      if (!(err instanceof RetryableError) || attempt >= MAX_ATTEMPTS) throw err;
+      await sleep(RETRY_DELAY_MS * attempt, options.signal);
+    }
+  }
 }

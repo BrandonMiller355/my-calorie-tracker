@@ -1,5 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { FoodEntry, Goals, LibraryFood, Meal, MealSuggestions } from '../types';
+import {
+  DEFAULT_GOALS,
+  type FoodEntry,
+  type Goals,
+  type LibraryFood,
+  type Meal,
+  type MealSuggestions,
+  type WeekDeficitDay,
+} from '../types';
 import type { StorageRepository } from './StorageRepository';
 
 /** Row shape of the food_entries table (snake_case, per supabase/schema.sql). */
@@ -194,5 +202,48 @@ export class SupabaseRepository implements StorageRepository {
       recent: rows.filter((r) => r.suggestion_group === 'recent').map(fromFoodRow),
       mostUsed: rows.filter((r) => r.suggestion_group === 'most_used').map(fromFoodRow),
     };
+  }
+
+  async getWeekDeficitSummary(from: string, through: string): Promise<WeekDeficitDay[]> {
+    const { data, error } = await this.client.rpc('week_deficit_summary', {
+      p_from: from,
+      p_through: through,
+    });
+    if (error) throw new Error(`Loading weekly deficit summary failed: ${error.message}`);
+    const rows = (data ?? []) as {
+      date: string;
+      consumed_calories: number;
+      effective_goal_calories: number;
+      has_entries: boolean;
+    }[];
+    return rows.map((row) => ({
+      date: row.date,
+      consumedCalories: row.consumed_calories,
+      effectiveGoalCalories: row.effective_goal_calories,
+      hasEntries: row.has_entries,
+    }));
+  }
+
+  async getWeeklyDeficitGoal(): Promise<number | null> {
+    const { data, error } = await this.client
+      .from('goals')
+      .select('weekly_deficit_goal')
+      .maybeSingle();
+    if (error) throw new Error(`Loading weekly deficit goal failed: ${error.message}`);
+    return (data as { weekly_deficit_goal: number | null } | null)?.weekly_deficit_goal ?? null;
+  }
+
+  async saveWeeklyDeficitGoal(goal: number): Promise<void> {
+    // The goals row may not exist yet (user has never saved default goals), so
+    // the other columns are re-read and carried through the upsert to avoid
+    // clobbering them with placeholder values.
+    const { data: existing, error: selectError } = await this.client
+      .from('goals')
+      .select('calories, carbs, protein, fat')
+      .maybeSingle();
+    if (selectError) throw new Error(`Saving weekly deficit goal failed: ${selectError.message}`);
+    const base = (existing as Goals | null) ?? DEFAULT_GOALS;
+    const { error } = await this.client.from('goals').upsert({ ...base, weekly_deficit_goal: goal });
+    if (error) throw new Error(`Saving weekly deficit goal failed: ${error.message}`);
   }
 }
