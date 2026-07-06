@@ -2,6 +2,9 @@ import { round1 } from '../lib/totals';
 import { DEFAULT_SERVING_LABEL, type FoodSearchResult, type ServingSize } from '../types';
 
 const SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
+const PRODUCT_URL = 'https://world.openfoodfacts.org/api/v2/product';
+const FIELDS =
+  'code,product_name,brands,serving_quantity,serving_quantity_unit,nutrition_data_per,nutriments,categories_tags,unique_scans_n';
 const PAGE_SIZE = 20;
 // OFF's search_simple matches loosely across many fields (categories, tags in
 // other languages, etc.), so a chunk of what it returns has nothing to do
@@ -171,24 +174,29 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** Fetch that surfaces network failures as retryable; HTTP status handling stays with the caller. */
+async function fetchOff(url: string, signal?: AbortSignal): Promise<Response> {
+  try {
+    return await fetch(url, { signal });
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    throw new RetryableError(err instanceof Error ? err.message : 'Network error');
+  }
+}
+
+function throwForStatus(res: Response, label: string): never {
+  const message = `${label} failed (HTTP ${res.status})`;
+  if (res.status === 429 || res.status >= 500) throw new RetryableError(message);
+  throw new Error(message);
+}
+
 async function attemptSearch(
   url: string,
   query: string,
   signal?: AbortSignal,
 ): Promise<FoodSearchResult[]> {
-  let res: Response;
-  try {
-    res = await fetch(url, { signal });
-  } catch (err) {
-    if (isAbortError(err)) throw err;
-    throw new RetryableError(err instanceof Error ? err.message : 'Network error');
-  }
-
-  if (!res.ok) {
-    const message = `Food search failed (HTTP ${res.status})`;
-    if (res.status === 429 || res.status >= 500) throw new RetryableError(message);
-    throw new Error(message);
-  }
+  const res = await fetchOff(url, signal);
+  if (!res.ok) throwForStatus(res, 'Food search');
 
   const data: { products?: OffProduct[] } = await res.json();
   return rankAndFilter(data.products ?? [], query)
@@ -204,8 +212,7 @@ function buildSearchUrl(query: string, country: string | undefined): string {
     action: 'process',
     json: '1',
     page_size: String(FETCH_PAGE_SIZE),
-    fields:
-      'code,product_name,brands,serving_quantity,serving_quantity_unit,nutrition_data_per,nutriments,categories_tags,unique_scans_n',
+    fields: FIELDS,
   });
   if (country) {
     params.set('tagtype_0', 'countries');
@@ -215,17 +222,13 @@ function buildSearchUrl(query: string, country: string | undefined): string {
   return `${SEARCH_URL}?${params}`;
 }
 
-async function searchWithRetry(
-  url: string,
-  query: string,
-  signal?: AbortSignal,
-): Promise<FoodSearchResult[]> {
-  for (let attempt = 1; ; attempt++) {
+async function withRetry<T>(attempt: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  for (let n = 1; ; n++) {
     try {
-      return await attemptSearch(url, query, signal);
+      return await attempt();
     } catch (err) {
-      if (!(err instanceof RetryableError) || attempt >= MAX_ATTEMPTS) throw err;
-      await sleep(RETRY_DELAY_MS * attempt, signal);
+      if (!(err instanceof RetryableError) || n >= MAX_ATTEMPTS) throw err;
+      await sleep(RETRY_DELAY_MS * n, signal);
     }
   }
 }
@@ -238,10 +241,46 @@ export async function searchFoods(
   // by global popularity, which buries local-language matches under products
   // from everywhere else. Fall back to the whole index when the local search
   // finds nothing (e.g. a foreign product, or a locale without a region).
+  const { signal } = options;
   const region = localeRegion();
   if (region) {
-    const local = await searchWithRetry(buildSearchUrl(query, region), query, options.signal);
+    const local = await withRetry(() => attemptSearch(buildSearchUrl(query, region), query, signal), signal);
     if (local.length > 0) return local;
   }
-  return searchWithRetry(buildSearchUrl(query, undefined), query, options.signal);
+  return withRetry(() => attemptSearch(buildSearchUrl(query, undefined), query, signal), signal);
+}
+
+async function attemptProductLookup(
+  code: string,
+  signal?: AbortSignal,
+): Promise<FoodSearchResult | null> {
+  const url = `${PRODUCT_URL}/${encodeURIComponent(code)}?${new URLSearchParams({ fields: FIELDS })}`;
+  const res = await fetchOff(url, signal);
+  // OFF answers an unknown barcode with a 404 (carrying a status:0 body).
+  if (res.status === 404) return null;
+  if (!res.ok) throwForStatus(res, 'Barcode lookup');
+
+  const data: { status?: number; product?: OffProduct } = await res.json();
+  if (data.status !== 1 || !data.product) return null;
+  return mapProduct(data.product, 0);
+}
+
+/**
+ * Look up a scanned barcode. Resolves to null when OFF has no such product —
+ * distinct from a thrown error, which means the lookup itself failed. Some US
+ * products are stored under the zero-padded 13-digit EAN form, so a miss on a
+ * 12-digit UPC-A code is retried once with a leading zero.
+ */
+export async function getProductByBarcode(
+  code: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<FoodSearchResult | null> {
+  const { signal } = options;
+  const trimmed = code.trim();
+  const direct = await withRetry(() => attemptProductLookup(trimmed, signal), signal);
+  if (direct) return direct;
+  if (/^\d{12}$/.test(trimmed)) {
+    return withRetry(() => attemptProductLookup(`0${trimmed}`, signal), signal);
+  }
+  return null;
 }

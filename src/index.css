@@ -716,6 +716,74 @@ label.flagged input {
   color: var(--muted);
 }
 
+/* Barcode scanner */
+.search-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scan-button {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--card);
+  color: var(--text);
+}
+
+.scan-button:hover {
+  border-color: var(--accent);
+}
+
+.scanner-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 32, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  z-index: 20;
+}
+
+.scanner-video {
+  width: 100%;
+  max-width: 480px;
+  border-radius: var(--radius);
+  background: black;
+}
+
+.scanner-hint {
+  color: white;
+  font-size: 14px;
+  margin: 0;
+}
+
+.scanner-error {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 20px;
+  max-width: 420px;
+  font-size: 14px;
+}
+
+.scanner-cancel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg);
+  color: var(--text);
+}
+
 /* Food library */
 .foods-screen h1 {
   font-size: 20px;

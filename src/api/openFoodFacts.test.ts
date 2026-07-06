@@ -1,4 +1,4 @@
-import { mapProduct, searchFoods, type OffProduct } from './openFoodFacts';
+import { getProductByBarcode, mapProduct, searchFoods, type OffProduct } from './openFoodFacts';
 
 describe('mapProduct', () => {
   it('prefers per-serving nutrients and derives a weight equivalence', () => {
@@ -292,6 +292,115 @@ describe('searchFoods', () => {
 
     controller.abort();
     await expect(searchFoods('apple', { signal: controller.signal })).rejects.toThrow('Aborted');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getProductByBarcode', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const yogurt: OffProduct = {
+    code: '0123456789012',
+    product_name: 'Greek Yogurt',
+    nutriments: { 'energy-kcal_100g': 53 },
+  };
+
+  function foundResponse(product: OffProduct): Response {
+    return new Response(JSON.stringify({ status: 1, product }), { status: 200 });
+  }
+
+  function notFoundResponse(): Response {
+    return new Response(JSON.stringify({ status: 0, status_verbose: 'product not found' }), {
+      status: 404,
+    });
+  }
+
+  it('returns the mapped product for a known barcode', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(foundResponse(yogurt));
+
+    const result = await getProductByBarcode('4056489098478');
+    expect(result?.name).toBe('Greek Yogurt');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v2/product/4056489098478');
+  });
+
+  it('returns null for an unknown 13-digit barcode without a zero-pad retry', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(notFoundResponse());
+
+    await expect(getProductByBarcode('4056489098478')).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a missed 12-digit UPC-A code with the zero-padded form', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(notFoundResponse())
+      .mockResolvedValueOnce(foundResponse(yogurt));
+
+    const result = await getProductByBarcode('123456789012');
+    expect(result?.name).toBe('Greek Yogurt');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v2/product/123456789012');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/api/v2/product/0123456789012');
+  });
+
+  it('returns null when both the raw and zero-padded forms miss', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(notFoundResponse());
+
+    await expect(getProductByBarcode('123456789012')).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a status-0 body on a 200 response as not found', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ status: 0 }), { status: 200 }),
+    );
+
+    await expect(getProductByBarcode('4056489098478')).resolves.toBeNull();
+  });
+
+  it('retries transient 5xx errors and succeeds once OFF recovers', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(foundResponse(yogurt));
+
+    const promise = getProductByBarcode('4056489098478');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result?.name).toBe('Greek Yogurt');
+    vi.useRealTimers();
+  });
+
+  it('throws once retries are exhausted', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const promise = getProductByBarcode('4056489098478');
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Failed to fetch');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('does not retry once the request is aborted', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+
+    controller.abort();
+    await expect(
+      getProductByBarcode('4056489098478', { signal: controller.signal }),
+    ).rejects.toThrow('Aborted');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

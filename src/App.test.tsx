@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
-import { searchFoods } from './api/openFoodFacts';
+import { getProductByBarcode, searchFoods } from './api/openFoodFacts';
+import { isBarcodeScanningSupported } from './components/BarcodeScanner';
 import { addDays } from './lib/date';
 import type { StorageRepository } from './storage';
 import {
@@ -15,7 +16,27 @@ import {
   type WeekDeficitDay,
 } from './types';
 
-vi.mock('./api/openFoodFacts', () => ({ searchFoods: vi.fn(async () => []) }));
+vi.mock('./api/openFoodFacts', () => ({
+  searchFoods: vi.fn(async () => []),
+  getProductByBarcode: vi.fn(async () => null),
+}));
+
+const SCANNED_CODE = vi.hoisted(() => '4056489098478');
+
+// The real scanner needs a camera; this stub reports a fixed barcode on demand.
+vi.mock('./components/BarcodeScanner', () => ({
+  isBarcodeScanningSupported: vi.fn(async () => false),
+  BarcodeScanner: (props: { onDetected: (code: string) => void; onCancel: () => void }) => (
+    <div role="dialog" aria-label="Barcode scanner">
+      <button type="button" onClick={() => props.onDetected(SCANNED_CODE)}>
+        Simulate scan
+      </button>
+      <button type="button" onClick={props.onCancel}>
+        Cancel
+      </button>
+    </div>
+  ),
+}));
 
 type RouterEntry = string | { pathname: string; state: unknown };
 
@@ -504,6 +525,91 @@ describe('Search escalation round trip', () => {
     fireEvent.click(screen.getByText('Retry'));
     expect(await screen.findByRole('button', { name: /Granola/ })).toBeInTheDocument();
     expect(searchFoods).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Barcode scanning', () => {
+  const skyr: FoodSearchResult = {
+    id: SCANNED_CODE,
+    name: 'Skyr',
+    servingLabel: 'serving',
+    servingSize: { amount: 100, unit: 'g' },
+    calories: 63,
+    carbs: 4,
+    protein: 11,
+    fat: 0.2,
+  };
+
+  beforeEach(() => {
+    vi.mocked(isBarcodeScanningSupported).mockResolvedValue(true);
+    vi.mocked(getProductByBarcode).mockClear();
+    vi.mocked(getProductByBarcode).mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    // Module mocks survive vi.restoreAllMocks; put the default back for other describes
+    vi.mocked(isBarcodeScanningSupported).mockResolvedValue(false);
+  });
+
+  it('hides the scan button when barcode detection is unsupported', async () => {
+    vi.mocked(isBarcodeScanningSupported).mockResolvedValue(false);
+    renderApp(new FakeRepository(), ['/search']);
+
+    await screen.findByPlaceholderText(/Open Food Facts/);
+    expect(screen.queryByRole('button', { name: /Scan a barcode/ })).toBeNull();
+  });
+
+  it('scanning a known product hands off to the form with the meal preserved', async () => {
+    vi.mocked(getProductByBarcode).mockResolvedValue(skyr);
+    renderApp(new FakeRepository(), [
+      { pathname: '/search', state: { fromForm: { meal: 'lunch', date: '2026-07-06' } } },
+    ]);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Scan a barcode/ }));
+    fireEvent.click(screen.getByText('Simulate scan'));
+
+    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    expect(within(form).getByLabelText('Name')).toHaveValue('Skyr');
+    expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
+    expect(getProductByBarcode).toHaveBeenCalledWith(SCANNED_CODE, expect.anything());
+  });
+
+  it('cancelling the scanner returns to the search screen without a lookup', async () => {
+    renderApp(new FakeRepository(), ['/search']);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Scan a barcode/ }));
+    fireEvent.click(screen.getByText('Cancel'));
+
+    expect(screen.queryByRole('dialog', { name: 'Barcode scanner' })).toBeNull();
+    expect(screen.getByPlaceholderText(/Open Food Facts/)).toBeInTheDocument();
+    expect(getProductByBarcode).not.toHaveBeenCalled();
+  });
+
+  it('offers manual entry when the barcode is not in Open Food Facts', async () => {
+    renderApp(new FakeRepository(), ['/search']);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Scan a barcode/ }));
+    fireEvent.click(screen.getByText('Simulate scan'));
+
+    expect(await screen.findByText(/isn’t in Open Food Facts/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'add a food manually' })).toBeInTheDocument();
+  });
+
+  it('offers a retry with the captured code after a failed lookup', async () => {
+    vi.mocked(getProductByBarcode)
+      .mockRejectedValueOnce(new Error('Barcode lookup failed (HTTP 503)'))
+      .mockResolvedValueOnce(skyr);
+    renderApp(new FakeRepository(), ['/search']);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Scan a barcode/ }));
+    fireEvent.click(screen.getByText('Simulate scan'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Barcode lookup is unavailable/);
+
+    fireEvent.click(screen.getByText('Retry'));
+    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    expect(within(form).getByLabelText('Name')).toHaveValue('Skyr');
+    expect(getProductByBarcode).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(getProductByBarcode).mock.calls[1][0]).toBe(SCANNED_CODE);
   });
 });
 

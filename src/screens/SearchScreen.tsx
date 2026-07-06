@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { searchFoods } from '../api/openFoodFacts';
+import { getProductByBarcode, searchFoods } from '../api/openFoodFacts';
+import { BarcodeScanner, isBarcodeScanningSupported } from '../components/BarcodeScanner';
 import { unitLabel } from '../lib/units';
 import type { FoodSearchResult, Meal } from '../types';
 
@@ -9,6 +10,13 @@ type SearchState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'done'; results: FoodSearchResult[] };
+
+type ScanState =
+  | { kind: 'idle' }
+  | { kind: 'scanning' }
+  | { kind: 'looking-up' }
+  | { kind: 'not-found' }
+  | { kind: 'error'; message: string; code: string };
 
 /** Present when opened from the add-entry form's "search online" action */
 interface FromFormState {
@@ -26,8 +34,20 @@ export function SearchScreen() {
   const fromForm = (location.state as FromFormState | null)?.fromForm;
   const [query, setQuery] = useState(fromForm?.query ?? '');
   const [state, setState] = useState<SearchState>({ kind: 'idle' });
+  const [canScan, setCanScan] = useState(false);
+  const [scan, setScan] = useState<ScanState>({ kind: 'idle' });
   const navigate = useNavigate();
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void isBarcodeScanningSupported().then((supported) => {
+      if (!cancelled && supported) setCanScan(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function runSearch(q: string) {
     abortRef.current?.abort();
@@ -67,19 +87,97 @@ export function SearchScreen() {
     navigate('/', { state: { prefill: result, meal: fromForm?.meal } });
   }
 
+  // A found product enters the same select() flow as a text search result;
+  // the scanned barcode itself is never persisted.
+  async function lookupBarcode(code: string) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setScan({ kind: 'looking-up' });
+    try {
+      const result = await getProductByBarcode(code, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (result) {
+        select(result);
+        return;
+      }
+      setScan({ kind: 'not-found' });
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setScan({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Barcode lookup failed',
+        code,
+      });
+    }
+  }
+
+  const manualEntryLink = (
+    <Link to="/" state={{ openManual: true, meal: fromForm?.meal }}>
+      add a food manually
+    </Link>
+  );
+
   return (
     <div className="search-screen">
       <h1>Search foods</h1>
-      <input
-        className="search-input"
-        type="search"
-        placeholder="Search Open Food Facts, e.g. “greek yogurt”"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        autoFocus
-      />
+      <div className="search-actions">
+        <input
+          className="search-input"
+          type="search"
+          placeholder="Search Open Food Facts, e.g. “greek yogurt”"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (scan.kind !== 'idle') setScan({ kind: 'idle' });
+          }}
+          autoFocus
+        />
+        {canScan && (
+          <button
+            type="button"
+            className="scan-button"
+            onClick={() => setScan({ kind: 'scanning' })}
+          >
+            📷 Scan a barcode
+          </button>
+        )}
+      </div>
 
-      {state.kind === 'idle' && (
+      {scan.kind === 'scanning' && (
+        <BarcodeScanner
+          onDetected={(code) => void lookupBarcode(code)}
+          onCancel={() => setScan({ kind: 'idle' })}
+          fallback={<p>You can still search by name above, or {manualEntryLink}.</p>}
+        />
+      )}
+
+      {scan.kind === 'looking-up' && <p className="loading">Looking up barcode…</p>}
+
+      {scan.kind === 'not-found' && (
+        <div className="search-empty">
+          <p>That barcode isn’t in Open Food Facts.</p>
+          <p>Try searching by name, or {manualEntryLink}.</p>
+        </div>
+      )}
+
+      {scan.kind === 'error' && (
+        <div className="search-error" role="alert">
+          <p>Barcode lookup is unavailable right now ({scan.message}).</p>
+          <p>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void lookupBarcode(scan.code)}
+            >
+              Retry
+            </button>{' '}
+            or still {manualEntryLink}.
+          </p>
+        </div>
+      )}
+
+      {state.kind === 'idle' && scan.kind === 'idle' && (
         <p className="search-hint">
           Type at least 2 characters to search, or{' '}
           <Link to="/" state={{ openManual: true, meal: fromForm?.meal }}>
