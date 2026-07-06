@@ -585,6 +585,29 @@ describe('Food library screen', () => {
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
     expect(screen.queryByRole('option', { name: /Chips/ })).toBeNull();
   });
+
+  it('filters the list by name and description, with a no-match hint', async () => {
+    const repo = new FakeRepository();
+    const base = { servingLabel: 'serving', calories: 100, carbs: 10, protein: 5, fat: 2, source: 'manual' as const };
+    await repo.addFood({ ...base, id: 'f1', name: 'Greek yogurt', description: 'Fage 5%' });
+    await repo.addFood({ ...base, id: 'f2', name: 'Rice' });
+    renderApp(repo, ['/foods']);
+
+    // Everything shows before a query is typed
+    expect(await screen.findByText('Greek yogurt')).toBeInTheDocument();
+    expect(screen.getByText('Rice')).toBeInTheDocument();
+
+    const filter = screen.getByLabelText('Filter your library');
+    fireEvent.change(filter, { target: { value: 'fage' } }); // matches description
+    expect(screen.getByText('Greek yogurt')).toBeInTheDocument();
+    expect(screen.queryByText('Rice')).toBeNull();
+
+    fireEvent.change(filter, { target: { value: 'tofu' } });
+    expect(screen.getByText('No foods match “tofu”.')).toBeInTheDocument();
+
+    fireEvent.change(filter, { target: { value: '' } });
+    expect(screen.getByText('Rice')).toBeInTheDocument();
+  });
 });
 
 describe('Structured serving units', () => {

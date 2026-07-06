@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { findFoodByName } from '../lib/foodMatch';
+import { findFoodByName, matchFoods } from '../lib/foodMatch';
 import { MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
   validateFoodForm,
@@ -127,7 +127,7 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
               />
             </label>
             <label>
-              Equals (optional)
+              Equals
               <input
                 inputMode="decimal"
                 value={values.servingSizeAmount}
@@ -204,8 +204,12 @@ export function FoodsScreen() {
   const { foods, archiveFood } = useAppState();
   const [form, setForm] = useState<FormMode>(null);
   const [archiveFailed, setArchiveFailed] = useState(false);
+  const [query, setQuery] = useState('');
 
-  const sorted = [...foods].sort((a, b) => a.name.localeCompare(b.name));
+  const visible =
+    query.trim() === ''
+      ? [...foods].sort((a, b) => a.name.localeCompare(b.name))
+      : matchFoods(foods, query, Infinity);
 
   function handleArchive(food: LibraryFood) {
     if (
@@ -237,11 +241,24 @@ export function FoodsScreen() {
         </p>
       )}
 
-      {sorted.length === 0 ? (
+      {foods.length > 0 && (
+        <input
+          className="search-input"
+          type="search"
+          placeholder="Filter your library"
+          aria-label="Filter your library"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      )}
+
+      {foods.length === 0 ? (
         <p className="search-hint">Nothing here yet — foods appear as you log them.</p>
+      ) : visible.length === 0 ? (
+        <p className="search-hint">No foods match “{query.trim()}”.</p>
       ) : (
         <ul className="food-list">
-          {sorted.map((food) => (
+          {visible.map((food) => (
             <li key={food.id} className="food-row">
               <div className="food-row-main">
                 <span className="result-name">{food.name}</span>

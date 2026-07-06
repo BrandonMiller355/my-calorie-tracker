@@ -9,7 +9,7 @@ export interface Totals {
 
 export const ZERO_TOTALS: Totals = { calories: 0, carbs: 0, protein: 0, fat: 0 };
 
-function round1(n: number): number {
+export function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 

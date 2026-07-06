@@ -113,6 +113,15 @@ describe('mapProduct', () => {
     expect(result.protein).toBeUndefined();
   });
 
+  it('rounds ugly floating-point nutrient values to 1 decimal place', () => {
+    const p: OffProduct = {
+      code: '222',
+      product_name: 'Maxi pavo finas lonchas',
+      nutriments: { 'energy-kcal_100g': 53.2982791586997 },
+    };
+    expect(mapProduct(p, 0)!.calories).toBe(53.3);
+  });
+
   it('returns null for products without a name', () => {
     expect(mapProduct({ code: '999' }, 0)).toBeNull();
     expect(mapProduct({ product_name: '  ' }, 0)).toBeNull();
@@ -123,6 +132,10 @@ describe('searchFoods', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  function stubLanguage(lang: string) {
+    vi.spyOn(window.navigator, 'language', 'get').mockReturnValue(lang);
+  }
 
   it('queries OFF, maps products, and drops unusable ones', async () => {
     const products: OffProduct[] = [
@@ -139,7 +152,95 @@ describe('searchFoods', () => {
 
     const url = String(fetchMock.mock.calls[0][0]);
     expect(url).toContain('search_terms=apple');
-    expect(url).toContain('page_size=20');
+  });
+
+  it('filters by the locale country so local products rank first', async () => {
+    stubLanguage('en-US');
+    const products: OffProduct[] = [
+      { code: '1', product_name: 'Turkey Breast', nutriments: { 'energy-kcal_100g': 100 } },
+    ];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ products }), { status: 200 }),
+    );
+
+    const results = await searchFoods('turkey');
+    expect(results.map((r) => r.name)).toEqual(['Turkey Breast']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain('tagtype_0=countries');
+    expect(url).toContain('tag_0=us');
+  });
+
+  it('falls back to the world index when the local search finds nothing', async () => {
+    stubLanguage('en-US');
+    const localJunk: OffProduct[] = [
+      { code: '1', product_name: 'Croissant' }, // no mention of the query -> filtered out
+    ];
+    const worldMatch: OffProduct[] = [
+      { code: '2', product_name: 'Vegemite', nutriments: { 'energy-kcal_100g': 189 } },
+    ];
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ products: localJunk }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ products: worldMatch }), { status: 200 }),
+      );
+
+    const results = await searchFoods('vegemite');
+    expect(results.map((r) => r.name)).toEqual(['Vegemite']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('tag_0=us');
+    expect(String(fetchMock.mock.calls[1][0])).not.toContain('tag_0');
+  });
+
+  it('skips the country filter when the locale has no region', async () => {
+    stubLanguage('en');
+    const products: OffProduct[] = [
+      { code: '1', product_name: 'Apple', nutriments: { 'energy-kcal_100g': 52 } },
+    ];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ products }), { status: 200 }),
+    );
+
+    await searchFoods('apple');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('tagtype_0');
+  });
+
+  it('drops results that only match on unrelated fields, keeping real matches', async () => {
+    const products: OffProduct[] = [
+      { code: '1', product_name: 'Turkey Breast', nutriments: { 'energy-kcal_100g': 100 } },
+      // No mention of "turkey" anywhere OFF's loose search still returned this.
+      { code: '2', product_name: 'Dubai Chocolate', nutriments: { 'energy-kcal_100g': 500 } },
+      // Only matches via an unrelated tag, e.g. countries sold in — still junk.
+      { code: '3', product_name: 'Gherkins', categories_tags: ['en:pickles'] },
+    ];
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ products }), { status: 200 }),
+    );
+
+    const results = await searchFoods('turkey');
+    expect(results.map((r) => r.name)).toEqual(['Turkey Breast']);
+  });
+
+  it('ranks name matches above category-only matches, using popularity as a tiebreaker', async () => {
+    const products: OffProduct[] = [
+      {
+        code: '1',
+        product_name: 'Cordon bleu de dinde',
+        categories_tags: ['en:turkey-and-its-products'],
+        unique_scans_n: 500,
+      },
+      { code: '2', product_name: 'Turkey Sausage', unique_scans_n: 1 },
+      { code: '3', product_name: 'Turkey Breast', unique_scans_n: 50 },
+    ];
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ products }), { status: 200 }),
+    );
+
+    const results = await searchFoods('turkey');
+    expect(results.map((r) => r.name)).toEqual(['Turkey Breast', 'Turkey Sausage', 'Cordon bleu de dinde']);
   });
 
   it('throws immediately on non-retryable HTTP errors', async () => {
