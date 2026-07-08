@@ -55,6 +55,7 @@ export function PhotoCapture({ onCapture, onCancel, fallback }: PhotoCaptureProp
     const video: HTMLVideoElement = videoEl;
 
     let stopped = false;
+    let restartTimer: number | undefined;
 
     function stop() {
       // Leaked tracks keep the phone's camera indicator on
@@ -63,20 +64,26 @@ export function PhotoCapture({ onCapture, onCancel, fallback }: PhotoCaptureProp
     }
 
     async function start() {
+      stop();
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
+          video: {
+            facingMode: 'environment',
+            // Defaults can be 640x480; ask for a sharper frame for the photo
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
         });
       } catch (err) {
         if (!stopped) setCameraError(cameraErrorMessage(err));
         return;
       }
-      streamRef.current = stream;
       if (stopped) {
-        stop();
+        stream.getTracks().forEach((t) => t.stop());
         return;
       }
+      streamRef.current = stream;
       video.srcObject = stream;
       try {
         await video.play();
@@ -86,10 +93,27 @@ export function PhotoCapture({ onCapture, onCancel, fallback }: PhotoCaptureProp
       if (!stopped) setReady(true);
     }
 
+    // The stream keeps the orientation it was opened in (Android), so a
+    // rotated phone would preview — and capture — sideways frames. Reopen the
+    // camera when the device rotates; debounced because rotation fires a burst
+    // of resize events.
+    function handleOrientationChange() {
+      window.clearTimeout(restartTimer);
+      restartTimer = window.setTimeout(() => {
+        if (!stopped) {
+          setReady(false);
+          void start();
+        }
+      }, 250);
+    }
+
     void start();
+    screen.orientation?.addEventListener('change', handleOrientationChange);
 
     return () => {
       stopped = true;
+      window.clearTimeout(restartTimer);
+      screen.orientation?.removeEventListener('change', handleOrientationChange);
       stop();
     };
   }, []);

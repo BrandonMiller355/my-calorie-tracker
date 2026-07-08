@@ -103,6 +103,9 @@ export function FoodNameCombobox({
         id={optionId(i)}
         role="option"
         aria-selected={i === activeIndex}
+        // the list scrolls; keep the keyboard-highlighted option visible
+        // (optional call: jsdom has no scrollIntoView)
+        ref={i === activeIndex ? (el) => el?.scrollIntoView?.({ block: 'nearest' }) : undefined}
         className={`combobox-option${option.kind === 'action' ? ' combobox-action' : ''}${
           i === activeIndex ? ' active' : ''
         }`}

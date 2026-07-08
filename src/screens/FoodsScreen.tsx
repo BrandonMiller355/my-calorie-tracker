@@ -209,7 +209,7 @@ export function FoodsScreen() {
   const visible =
     query.trim() === ''
       ? [...foods].sort((a, b) => a.name.localeCompare(b.name))
-      : matchFoods(foods, query, Infinity);
+      : matchFoods(foods, query);
 
   function handleArchive(food: LibraryFood) {
     if (

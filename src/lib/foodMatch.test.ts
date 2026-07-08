@@ -60,8 +60,8 @@ describe('matchFoods', () => {
     expect(matchFoods(library, '   ')).toEqual([]);
   });
 
-  it('caps results at the limit', () => {
+  it('returns every match, not a capped subset', () => {
     const many = Array.from({ length: 10 }, (_, i) => food(String(i), `Apple ${i}`));
-    expect(matchFoods(many, 'apple', 8)).toHaveLength(8);
+    expect(matchFoods(many, 'apple')).toHaveLength(10);
   });
 });

@@ -746,15 +746,21 @@ label.flagged input {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* "safe" keeps the top reachable when content overflows and scrolls */
+  justify-content: safe center;
   gap: 16px;
   padding: 16px;
   z-index: 20;
+  /* Short (landscape) viewports: never let content push the buttons off-screen */
+  overflow-y: auto;
 }
 
 .scanner-video {
   width: 100%;
   max-width: 480px;
+  /* Cap the preview so the hint and buttons always fit below it, even in landscape */
+  max-height: 50vh;
+  object-fit: contain;
   border-radius: var(--radius);
   background: black;
 }

@@ -24,7 +24,7 @@ function rank(food: LibraryFood, query: string): number | null {
  * Case-insensitive match over name + description of the in-memory library,
  * ranked prefix > word boundary > substring, ties broken alphabetically.
  */
-export function matchFoods(foods: LibraryFood[], query: string, limit = 8): LibraryFood[] {
+export function matchFoods(foods: LibraryFood[], query: string): LibraryFood[] {
   const q = query.trim().toLowerCase();
   if (q === '') return [];
   return foods
@@ -33,6 +33,5 @@ export function matchFoods(foods: LibraryFood[], query: string, limit = 8): Libr
       return r === null ? [] : [{ food, r }];
     })
     .sort((a, b) => a.r - b.r || a.food.name.localeCompare(b.food.name))
-    .slice(0, limit)
     .map(({ food }) => food);
 }
