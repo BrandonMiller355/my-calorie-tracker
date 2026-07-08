@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getProductByBarcode, searchFoods } from '../api/openFoodFacts';
+import { AiAnalyzeOverlay } from '../components/AiAnalyzeOverlay';
 import { BarcodeScanner, isBarcodeScanningSupported } from '../components/BarcodeScanner';
 import { unitLabel } from '../lib/units';
 import type { FoodSearchResult, Meal } from '../types';
@@ -36,6 +37,9 @@ export function SearchScreen() {
   const [state, setState] = useState<SearchState>({ kind: 'idle' });
   const [canScan, setCanScan] = useState(false);
   const [scan, setScan] = useState<ScanState>({ kind: 'idle' });
+  // Broader gate than the barcode button: any camera works for a photo.
+  const canAnalyze = typeof navigator.mediaDevices?.getUserMedia === 'function';
+  const [analyzing, setAnalyzing] = useState(false);
   const navigate = useNavigate();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -142,7 +146,24 @@ export function SearchScreen() {
             📷 Scan a barcode
           </button>
         )}
+        {canAnalyze && (
+          <button
+            type="button"
+            className="scan-button"
+            onClick={() => setAnalyzing(true)}
+          >
+            ✨ AI analyze a photo
+          </button>
+        )}
       </div>
+
+      {analyzing && (
+        <AiAnalyzeOverlay
+          onAccept={select}
+          onCancel={() => setAnalyzing(false)}
+          fallback={<p>You can still search by name above, or {manualEntryLink}.</p>}
+        />
+      )}
 
       {scan.kind === 'scanning' && (
         <BarcodeScanner

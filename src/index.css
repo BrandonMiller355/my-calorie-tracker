@@ -784,6 +784,125 @@ label.flagged input {
   color: var(--text);
 }
 
+/* AI photo analysis */
+.shutter-button {
+  border: none;
+  border-radius: 999px;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--accent-button);
+  color: white;
+}
+
+.shutter-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ai-review {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.ai-photo {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: black;
+}
+
+.ai-estimate {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.ai-estimate p {
+  margin: 0 0 4px;
+}
+
+.ai-estimate-label {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ai-estimate-name {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.ai-estimate-macros {
+  font-size: 14px;
+}
+
+.ai-estimate-note {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.ai-review .loading {
+  color: white;
+  margin: 0;
+}
+
+.ai-review .scanner-error {
+  margin: 0;
+  max-width: none;
+}
+
+.ai-refine {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-refine-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ai-refine-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-refine-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-accept {
+  border: none;
+  border-radius: 8px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--accent-button);
+  color: white;
+}
+
+.ai-accept:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Food library */
 .foods-screen h1 {
   font-size: 20px;

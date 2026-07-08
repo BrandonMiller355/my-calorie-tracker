@@ -23,6 +23,37 @@ vi.mock('./api/openFoodFacts', () => ({
 
 const SCANNED_CODE = vi.hoisted(() => '4056489098478');
 
+// The real overlay needs a camera and the Edge Function; this stub hands back
+// a fixed accepted estimate on demand.
+vi.mock('./components/AiAnalyzeOverlay', () => ({
+  AiAnalyzeOverlay: (props: {
+    onAccept: (result: FoodSearchResult) => void;
+    onCancel: () => void;
+  }) => (
+    <div role="dialog" aria-label="AI food analysis">
+      <button
+        type="button"
+        onClick={() =>
+          props.onAccept({
+            id: 'ai-result-1',
+            name: 'Chicken and rice',
+            servingLabel: 'serving',
+            calories: 550,
+            carbs: 60,
+            protein: 45,
+            fat: 12,
+          })
+        }
+      >
+        Simulate accept
+      </button>
+      <button type="button" onClick={props.onCancel}>
+        Cancel
+      </button>
+    </div>
+  ),
+}));
+
 // The real scanner needs a camera; this stub reports a fixed barcode on demand.
 vi.mock('./components/BarcodeScanner', () => ({
   isBarcodeScanningSupported: vi.fn(async () => false),
@@ -610,6 +641,54 @@ describe('Barcode scanning', () => {
     expect(within(form).getByLabelText('Name')).toHaveValue('Skyr');
     expect(getProductByBarcode).toHaveBeenCalledTimes(2);
     expect(vi.mocked(getProductByBarcode).mock.calls[1][0]).toBe(SCANNED_CODE);
+  });
+});
+
+describe('AI photo analysis', () => {
+  // jsdom has no navigator.mediaDevices; defining it shows the analyze button
+  function stubCameraSupport() {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: vi.fn() },
+      configurable: true,
+    });
+  }
+
+  afterEach(() => {
+    delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+  });
+
+  it('hides the AI analyze button when camera capture is unsupported', async () => {
+    renderApp(new FakeRepository(), ['/search']);
+
+    await screen.findByPlaceholderText(/Open Food Facts/);
+    expect(screen.queryByRole('button', { name: /AI analyze/ })).toBeNull();
+  });
+
+  it('an accepted estimate hands off to the form with the meal preserved', async () => {
+    stubCameraSupport();
+    renderApp(new FakeRepository(), [
+      { pathname: '/search', state: { fromForm: { meal: 'dinner', date: '2026-07-06' } } },
+    ]);
+
+    fireEvent.click(await screen.findByRole('button', { name: /AI analyze/ }));
+    fireEvent.click(screen.getByText('Simulate accept'));
+
+    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    expect(within(form).getByLabelText('Name')).toHaveValue('Chicken and rice');
+    expect(within(form).getByLabelText('Meal')).toHaveValue('dinner');
+  });
+
+  it('cancelling the overlay returns to the search screen with its state intact', async () => {
+    stubCameraSupport();
+    renderApp(new FakeRepository(), ['/search']);
+
+    const input = await screen.findByPlaceholderText(/Open Food Facts/);
+    fireEvent.change(input, { target: { value: 'yog' } });
+    fireEvent.click(screen.getByRole('button', { name: /AI analyze/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'AI food analysis' })).getByText('Cancel'));
+
+    expect(screen.queryByRole('dialog', { name: 'AI food analysis' })).toBeNull();
+    expect(screen.getByPlaceholderText(/Open Food Facts/)).toHaveValue('yog');
   });
 });
 
