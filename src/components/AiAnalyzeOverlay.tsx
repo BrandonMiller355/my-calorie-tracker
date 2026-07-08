@@ -7,10 +7,12 @@ import { PhotoCapture } from './PhotoCapture';
 // component's state and dies with it. Nothing here is persisted anywhere.
 type Phase =
   | { kind: 'capturing' }
+  /** Frame captured; camera stopped. Retake goes back to `capturing`. */
+  | { kind: 'confirming' }
   | { kind: 'analyzing' }
   | { kind: 'review'; estimate: FoodEstimate }
   | { kind: 'refining'; estimate: FoodEstimate }
-  /** Initial analysis failed; retry re-analyzes the same photo. */
+  /** Initial analysis failed; retry re-analyzes the same photo (and note). */
   | { kind: 'analyze-error'; message: string }
   /** A refinement failed; the prior estimate stays usable and the correction can be retried. */
   | { kind: 'refine-error'; estimate: FoodEstimate; message: string; failedCorrection: string };
@@ -30,7 +32,9 @@ interface AiAnalyzeOverlayProps {
 export function AiAnalyzeOverlay({ onAccept, onCancel, fallback }: AiAnalyzeOverlayProps) {
   const [phase, setPhase] = useState<Phase>({ kind: 'capturing' });
   const [image, setImage] = useState<string | null>(null);
-  /** Corrections the model has successfully incorporated, oldest first. */
+  /** Optional context note typed on the pre-send review step; sent as the first correction. */
+  const [note, setNote] = useState('');
+  /** Corrections the model has successfully incorporated, oldest first (the note, once sent, is corrections[0]). */
   const [corrections, setCorrections] = useState<string[]>([]);
   const [correctionInput, setCorrectionInput] = useState('');
   const abortRef = useRef<AbortController | null>(null);
@@ -76,16 +80,58 @@ export function AiAnalyzeOverlay({ onAccept, onCancel, fallback }: AiAnalyzeOver
     void analyze(image, correction, estimate);
   }
 
+  function handleRetake() {
+    setImage(null);
+    setPhase({ kind: 'capturing' });
+  }
+
+  function handleSend() {
+    if (!image) return;
+    void analyze(image, note.trim() || undefined);
+  }
+
   if (phase.kind === 'capturing') {
     return (
       <PhotoCapture
         onCapture={(img) => {
           setImage(img);
-          void analyze(img);
+          setPhase({ kind: 'confirming' });
         }}
         onCancel={onCancel}
         fallback={fallback}
       />
+    );
+  }
+
+  if (phase.kind === 'confirming') {
+    return (
+      <div className="scanner-overlay" role="dialog" aria-label="Review photo before sending">
+        <div className="ai-confirm">
+          {image && <img src={image} alt="Captured food" className="ai-photo" />}
+          <label htmlFor="ai-note" className="ai-refine-label">
+            Add context for the AI (optional), e.g. “I didn’t eat the ranch”
+          </label>
+          <textarea
+            id="ai-note"
+            className="ai-note-input"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Anything the photo doesn't show?"
+            rows={2}
+          />
+          <div className="ai-confirm-actions">
+            <button type="button" className="secondary" onClick={handleRetake}>
+              Retake
+            </button>
+            <button type="button" className="ai-accept" onClick={handleSend}>
+              Analyze
+            </button>
+          </div>
+        </div>
+        <button type="button" className="scanner-cancel secondary" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     );
   }
 
@@ -109,7 +155,7 @@ export function AiAnalyzeOverlay({ onAccept, onCancel, fallback }: AiAnalyzeOver
               <button
                 type="button"
                 className="link-button"
-                onClick={() => image && void analyze(image)}
+                onClick={() => image && void analyze(image, note.trim() || undefined)}
               >
                 Retry
               </button>

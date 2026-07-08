@@ -826,6 +826,42 @@ label.flagged input {
   background: black;
 }
 
+.ai-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.ai-confirm .ai-photo {
+  max-height: 320px;
+}
+
+.ai-note-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 15px;
+  font-weight: 400;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.ai-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-confirm-actions .ai-accept {
+  flex: 1;
+}
+
 .ai-estimate {
   background: var(--card);
   border-radius: var(--radius);
