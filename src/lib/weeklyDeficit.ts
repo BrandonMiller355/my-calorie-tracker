@@ -1,7 +1,7 @@
 import type { WeekDeficitDay } from '../types';
 
 export interface WeeklyDeficitResult {
-  /** Sum of (effective calorie-burn goal - consumed) across `weekSummary` */
+  /** Sum of (effective calorie-burn goal - consumed) across `weekSummary`, excluding `today` */
   deficit: number;
   /** true when an elapsed day in range has zero logged entries */
   hasMissingDays: boolean;
@@ -13,7 +13,9 @@ export interface WeeklyDeficitResult {
  * elapsed day is missing entries. `today` is passed in rather than read from
  * the clock so this stays pure and testable: the selected date's own
  * emptiness is only excused when it equals `today`, since a past selected
- * date has already fully elapsed.
+ * date has already fully elapsed. `today` itself is excluded from the
+ * deficit sum entirely, since its consumed total is necessarily partial
+ * until the day is over and would otherwise skew the running deficit.
  */
 export function computeWeeklyDeficit(
   weekSummary: WeekDeficitDay[],
@@ -23,7 +25,8 @@ export function computeWeeklyDeficit(
   const deficit =
     Math.round(
       weekSummary.reduce(
-        (sum, day) => sum + (day.effectiveGoalCalories - day.consumedCalories),
+        (sum, day) =>
+          day.date === today ? sum : sum + (day.effectiveGoalCalories - day.consumedCalories),
         0,
       ) * 10,
     ) / 10;

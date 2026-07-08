@@ -17,19 +17,23 @@ The system SHALL let the user set a weekly calorie deficit goal (a single kcal t
 - **THEN** the weekly deficit widget still shows the computed deficit-to-date, without a comparison to a goal
 
 ### Requirement: Weekly deficit-to-date display
-The system SHALL display, on the day log screen, the sum of (calorie burn goal − consumed calories) for each date from the Monday of the selected date's calendar week through the selected date, inclusive.
+The system SHALL display, on the day log screen, the sum of (calorie burn goal − consumed calories) for each date from the Monday of the selected date's calendar week through the selected date, inclusive, excluding today's own contribution since today has not fully elapsed.
 
 #### Scenario: Viewing today
 - **WHEN** the selected date is today
-- **THEN** the widget shows the sum from this week's Monday through today, updating as entries are added, edited, or deleted on any day in that range
+- **THEN** the widget shows the sum from this week's Monday through yesterday, updating as entries are added, edited, or deleted on any day in that range, but does not add today's own goal-minus-consumed to the total
 
 #### Scenario: Viewing a past date
 - **WHEN** the user navigates to a date in a previous calendar week
 - **THEN** the widget shows the sum from that week's Monday through the selected date only, not the full week
 
 #### Scenario: Viewing the first day of a week
-- **WHEN** the selected date is a Monday
+- **WHEN** the selected date is a Monday and it is not today
 - **THEN** the widget shows that single day's deficit only
+
+#### Scenario: Viewing today when today is a Monday
+- **WHEN** the selected date is today and today is a Monday
+- **THEN** the widget shows a deficit of zero, since the only day in range is today and it is excluded
 
 ### Requirement: Missing log data disclaimer
 The system SHALL indicate when the displayed weekly deficit-to-date includes one or more elapsed days with zero logged entries, since a day with nothing logged cannot be distinguished from a day that was not logged at all.

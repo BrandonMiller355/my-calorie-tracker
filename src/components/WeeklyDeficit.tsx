@@ -3,7 +3,7 @@ export function WeeklyDeficit({
   goal,
   hasMissingDays,
 }: {
-  /** Sum of (calorie burn goal - consumed) from this week's Monday through the selected date */
+  /** Sum of (calorie burn goal - consumed) from this week's Monday through the selected date, excluding today */
   deficit: number;
   /** null when the user hasn't set a weekly deficit goal */
   goal: number | null;
