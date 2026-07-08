@@ -33,5 +33,5 @@
 ## 6. Verification
 
 - [x] 6.1 `npm run build` and `npm test` pass
-- [ ] 6.2 Manual verification on the deployed site (Android/Chrome): capture a real dish, get an estimate, refine it once, accept, confirm the pre-filled form and saved entry; confirm cancel paths release the camera (indicator off)
+- [x] 6.2 Manual verification on the deployed site (Android/Chrome): capture a real dish, get an estimate, refine it once, accept, confirm the pre-filled form and saved entry; confirm cancel paths release the camera (indicator off)
 - [x] 6.3 Confirm the deployed bundle contains no Gemini key (`grep` the build output) and the function rejects unauthenticated calls
