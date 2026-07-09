@@ -384,6 +384,10 @@ describe('App (spec scenario walkthrough)', () => {
 });
 
 describe('Food library (auto-capture, suggestions, combobox)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('auto-captures a logged food and suggests it for that meal only', async () => {
     renderApp(new FakeRepository());
     await addFood('Breakfast', {
@@ -473,25 +477,119 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     expect(within(form).getByLabelText('Name')).toHaveValue('zzz');
   });
 
-  it('a macro tweak while logging does not overwrite the library food', async () => {
+  it('editing nutrition through the reveal updates the linked library food', async () => {
     renderApp(new FakeRepository());
     await addFood('Lunch', { name: 'Rice', calories: '200', carbs: '45', protein: '4', fat: '1' });
 
-    // Re-log from the suggestion, tweaking calories for this occasion only
+    // Re-log from the suggestion, editing nutrition through the reveal
     const lunch = screen.getByRole('region', { name: 'Lunch' });
     fireEvent.click(within(lunch).getByText('+ Add food'));
     const form = screen.getByRole('form', { name: 'Add food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
     fireEvent.click(await screen.findByRole('option', { name: /Rice/ }));
     fireEvent.click(within(form).getByText('Edit nutrition'));
+    expect(within(form).getByText('Updates your food library')).toBeInTheDocument();
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '250' } });
     fireEvent.click(within(form).getByText('Add to log'));
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
 
-    // The library still has the canonical 200 kcal
+    // The library now reflects the edited value, for future logs
     fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
-    expect(await screen.findByText(/200 kcal/)).toBeInTheDocument();
-    expect(screen.queryByText(/250 kcal/)).toBeNull();
+    expect(await screen.findByText(/250 kcal/)).toBeInTheDocument();
+    expect(screen.queryByText(/200 kcal/)).toBeNull();
+  });
+
+  it('editing an existing entry updates the library food without changing other logged entries', async () => {
+    renderApp(new FakeRepository());
+    await addFood('Lunch', { name: 'Rice', calories: '200', carbs: '45', protein: '4', fat: '1' });
+
+    // Log it again for dinner, linked to the same library food (recent/most-used
+    // suggestions are per-meal, so type the name to search the library instead)
+    const dinner = screen.getByRole('region', { name: 'Dinner' });
+    fireEvent.click(within(dinner).getByText('+ Add food'));
+    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Rice' } });
+    fireEvent.click(await screen.findByRole('option', { name: /^Rice/ }));
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+
+    // Edit only the dinner entry's nutrition
+    fireEvent.click(within(dinner).getByText('Rice'));
+    form = screen.getByRole('form', { name: 'Edit food entry' });
+    fireEvent.click(within(form).getByText('Edit nutrition'));
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '250' } });
+    fireEvent.click(within(form).getByText('Save changes'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit food entry' })).toBeNull());
+
+    // Dinner reflects the edit; lunch's already-logged entry is untouched
+    expect(within(dinner).getByText('250 kcal')).toBeInTheDocument();
+    const lunch = screen.getByRole('region', { name: 'Lunch' });
+    expect(within(lunch).getByText('200 kcal')).toBeInTheDocument();
+
+    // The library food picks up the edit for future logs
+    fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
+    expect(await screen.findByText(/250 kcal/)).toBeInTheDocument();
+  });
+
+  it('editing nutrition on an entry with no linked library food stays entry-only', async () => {
+    renderApp(new FakeRepository());
+    const lunch = await screen.findByRole('region', { name: 'Lunch' });
+
+    fireEvent.click(within(lunch).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Odd snack' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '80' } });
+    fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '10' } });
+    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '2' } });
+    fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '1' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+
+    // Archive the auto-captured food so the entry's link no longer resolves
+    fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(await screen.findByLabelText('Archive Odd snack'));
+    await waitFor(() => expect(screen.queryByText('Odd snack')).toBeNull());
+
+    // Editing the entry's nutrition now shows only the nutrition inputs, no anchor fields or note
+    fireEvent.click(screen.getByRole('link', { name: 'Log' }));
+    fireEvent.click(await screen.findByText('Odd snack'));
+    const editForm = screen.getByRole('form', { name: 'Edit food entry' });
+    fireEvent.click(within(editForm).getByText('Edit nutrition'));
+    expect(within(editForm).queryByLabelText('Serving name')).toBeNull();
+    expect(within(editForm).queryByText('Updates your food library')).toBeNull();
+    fireEvent.change(within(editForm).getByLabelText(/Calories/), { target: { value: '95' } });
+    fireEvent.click(within(editForm).getByText('Save changes'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit food entry' })).toBeNull());
+    // Meal subtotal (the entry is the only item logged for lunch) reflects the entry-only edit
+    expect(await within(screen.getByRole('region', { name: 'Lunch' })).findByText('95 kcal')).toBeInTheDocument();
+  });
+
+  it('editing the serving equivalence through "Edit nutrition" updates the library food anchor', async () => {
+    renderApp(new FakeRepository());
+    await addFood('Snacks', { name: 'Tuna', calories: '90', carbs: '0', protein: '20', fat: '1' });
+
+    const snacks = screen.getByRole('region', { name: 'Snacks' });
+    fireEvent.click(within(snacks).getByText('+ Add food'));
+    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.focus(within(form).getByLabelText('Name'));
+    fireEvent.click(await screen.findByRole('option', { name: /Tuna/ }));
+    fireEvent.click(within(form).getByText('Edit nutrition'));
+
+    // Anchor fields are pre-filled from the matched library food's current definition
+    expect(within(form).getByLabelText('Serving name')).toHaveValue('serving');
+    expect(within(form).getByLabelText('Equals')).toHaveValue('');
+
+    fireEvent.change(within(form).getByLabelText('Serving name'), {
+      target: { value: 'can (drained)' },
+    });
+    fireEvent.change(within(form).getByLabelText('Equals'), { target: { value: '120' } });
+    fireEvent.change(within(form).getByLabelText('Serving unit'), { target: { value: 'g' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+
+    fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
+    expect(await screen.findByText(/1 can \(drained\) = 120 g/)).toBeInTheDocument();
   });
 });
 
@@ -645,27 +743,15 @@ describe('Barcode scanning', () => {
 });
 
 describe('AI photo analysis', () => {
-  // jsdom has no navigator.mediaDevices; defining it shows the analyze button
-  function stubCameraSupport() {
-    Object.defineProperty(navigator, 'mediaDevices', {
-      value: { getUserMedia: vi.fn() },
-      configurable: true,
-    });
-  }
-
-  afterEach(() => {
-    delete (navigator as { mediaDevices?: unknown }).mediaDevices;
-  });
-
-  it('hides the AI analyze button when camera capture is unsupported', async () => {
+  it('the AI analyze button is always available, camera or not', async () => {
     renderApp(new FakeRepository(), ['/search']);
 
-    await screen.findByPlaceholderText(/Open Food Facts/);
-    expect(screen.queryByRole('button', { name: /AI analyze/ })).toBeNull();
+    expect(
+      await screen.findByRole('button', { name: /AI analyze/ }),
+    ).toBeInTheDocument();
   });
 
   it('an accepted estimate hands off to the form with the meal preserved', async () => {
-    stubCameraSupport();
     renderApp(new FakeRepository(), [
       { pathname: '/search', state: { fromForm: { meal: 'dinner', date: '2026-07-06' } } },
     ]);
@@ -679,7 +765,6 @@ describe('AI photo analysis', () => {
   });
 
   it('cancelling the overlay returns to the search screen with its state intact', async () => {
-    stubCameraSupport();
     renderApp(new FakeRepository(), ['/search']);
 
     const input = await screen.findByPlaceholderText(/Open Food Facts/);

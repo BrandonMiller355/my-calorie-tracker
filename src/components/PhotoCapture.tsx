@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 
 /** Long-edge cap for the exported JPEG; food recognition needs no more. */
 const MAX_EDGE_PX = 1024;
@@ -14,18 +14,47 @@ function cameraErrorMessage(err: unknown): string {
   return 'The camera could not be started.';
 }
 
-/** The current video frame as a JPEG data URL, downscaled to MAX_EDGE_PX. */
-function captureFrame(video: HTMLVideoElement): string | null {
-  const { videoWidth, videoHeight } = video;
-  if (!videoWidth || !videoHeight) return null;
-  const scale = Math.min(1, MAX_EDGE_PX / Math.max(videoWidth, videoHeight));
+/** Downscales any drawable source to a JPEG data URL whose long edge is capped at MAX_EDGE_PX. */
+function downscaleToJpeg(
+  source: CanvasImageSource,
+  naturalWidth: number,
+  naturalHeight: number,
+): string | null {
+  if (!naturalWidth || !naturalHeight) return null;
+  const scale = Math.min(1, MAX_EDGE_PX / Math.max(naturalWidth, naturalHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(videoWidth * scale);
-  canvas.height = Math.round(videoHeight * scale);
+  canvas.width = Math.round(naturalWidth * scale);
+  canvas.height = Math.round(naturalHeight * scale);
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+}
+
+/** The current video frame as a JPEG data URL, downscaled to MAX_EDGE_PX. */
+function captureFrame(video: HTMLVideoElement): string | null {
+  return downscaleToJpeg(video, video.videoWidth, video.videoHeight);
+}
+
+/**
+ * Loads an image file and downscales it the same way a camera frame is.
+ * Resolves to null (not rejects) if the source has no readable dimensions;
+ * rejects only if the file can't be decoded as an image at all.
+ */
+function loadImageFile(file: File): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(downscaleToJpeg(img, img.naturalWidth, img.naturalHeight));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('not a decodable image'));
+    };
+    img.src = url;
+  });
 }
 
 interface PhotoCaptureProps {
@@ -37,19 +66,29 @@ interface PhotoCaptureProps {
 
 /**
  * Rear-camera view with a shutter button that captures a single downscaled
- * JPEG frame. The camera stream is stopped on capture, cancel, and unmount
+ * JPEG frame, plus a "choose from library" action that downscales an
+ * existing image file the same way. Whichever source is unavailable (no
+ * camera, or the user hasn't picked a file) simply isn't shown; when the
+ * camera can't be used at all, the file picker becomes the only action. The
+ * camera stream is stopped on capture, file selection, cancel, and unmount
  * (same lifecycle rules as BarcodeScanner).
  */
 export function PhotoCapture({ onCapture, onCancel, fallback }: PhotoCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   // Kept in a ref so a parent re-render doesn't restart the camera effect.
   const onCaptureRef = useRef(onCapture);
   onCaptureRef.current = onCapture;
 
+  // Checked once at mount; this browser capability doesn't change mid-session.
+  const cameraSupported = typeof navigator.mediaDevices?.getUserMedia === 'function';
+
   useEffect(() => {
+    if (!cameraSupported) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
     const video: HTMLVideoElement = videoEl;
@@ -129,17 +168,51 @@ export function PhotoCapture({ onCapture, onCancel, fallback }: PhotoCaptureProp
     onCaptureRef.current(image);
   }
 
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file after an error or a retake
+    if (!file) return; // user dismissed the picker without choosing anything
+    setFileError(null);
+    try {
+      const image = await loadImageFile(file);
+      if (!image) {
+        setFileError("That file couldn't be used as a photo.");
+        return;
+      }
+      // Release the camera (if it was running) before analysis starts
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      onCaptureRef.current(image);
+    } catch {
+      setFileError("That file couldn't be used as a photo.");
+    }
+  }
+
+  const cameraUsable = cameraSupported && !cameraError;
+
   return (
     <div className="scanner-overlay" role="dialog" aria-label="Photograph food">
-      {cameraError ? (
-        <div className="scanner-error" role="alert">
-          <p>{cameraError}</p>
-          {fallback}
-        </div>
-      ) : (
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden-file-input"
+        aria-label="Choose a photo from your device"
+        onChange={(e) => void handleFileChange(e)}
+      />
+      {cameraUsable ? (
         <>
           <video ref={videoRef} className="scanner-video" playsInline muted />
           <p className="scanner-hint">Frame the food, then take the photo</p>
+          {fileError && (
+            <div className="scanner-error" role="alert">
+              <p>{fileError}</p>
+            </div>
+          )}
           <button
             type="button"
             className="shutter-button"
@@ -149,7 +222,27 @@ export function PhotoCapture({ onCapture, onCancel, fallback }: PhotoCaptureProp
           >
             📷 Take photo
           </button>
+          <button type="button" className="library-button secondary" onClick={openFilePicker}>
+            🖼️ Choose from library
+          </button>
         </>
+      ) : (
+        <div className="photo-picker-panel">
+          {cameraError && (
+            <div className="scanner-error" role="alert">
+              <p>{cameraError}</p>
+            </div>
+          )}
+          {fileError && (
+            <div className="scanner-error" role="alert">
+              <p>{fileError}</p>
+            </div>
+          )}
+          <button type="button" className="library-button" onClick={openFilePicker}>
+            🖼️ Choose a photo from your device
+          </button>
+          {fallback}
+        </div>
       )}
       <button type="button" className="scanner-cancel secondary" onClick={onCancel}>
         Cancel

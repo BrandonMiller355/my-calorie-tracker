@@ -807,6 +807,29 @@ label.flagged input {
   cursor: default;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
+.library-button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.photo-picker-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+}
+
 .ai-review {
   display: flex;
   flex-direction: column;
