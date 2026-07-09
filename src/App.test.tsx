@@ -381,6 +381,23 @@ describe('App (spec scenario walkthrough)', () => {
     expect(await screen.findByText('Mystery Snack')).toBeInTheDocument();
     expect(screen.getByText('1800 kcal left')).toBeInTheDocument();
   });
+
+  it('a prefilled form leaves the name unfocused so no dropdown/keyboard pops up', async () => {
+    const prefill: FoodSearchResult = {
+      id: 'off-2',
+      name: 'Estimated Plate',
+      servingLabel: 'serving',
+      calories: 350,
+      carbs: 30,
+      protein: 20,
+      fat: 15,
+    };
+    renderApp(new FakeRepository(), [{ pathname: '/', state: { prefill } }]);
+
+    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    expect(within(form).getByLabelText('Name')).not.toHaveFocus();
+    expect(within(form).queryByRole('listbox')).toBeNull();
+  });
 });
 
 describe('Food library (auto-capture, suggestions, combobox)', () => {

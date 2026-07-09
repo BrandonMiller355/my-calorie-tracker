@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { LibraryFood } from '../types';
 
 export interface ComboboxGroup {
@@ -22,6 +22,8 @@ export interface FoodNameComboboxProps {
   /** Fixed footer rows, e.g. search online / use as new food */
   actions: ComboboxAction[];
   onSelectFood: (food: LibraryFood) => void;
+  /** Focus the input on mount (opens the dropdown and, on mobile, the keyboard) */
+  autoFocus?: boolean;
 }
 
 type Option = { kind: 'food'; food: LibraryFood } | { kind: 'action'; action: ComboboxAction };
@@ -37,10 +39,12 @@ export function FoodNameCombobox({
   groups,
   actions,
   onSelectFood,
+  autoFocus = true,
 }: FoodNameComboboxProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const listId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const options: Option[] = [
     ...groups.flatMap((g) => g.foods.map((food): Option => ({ kind: 'food', food }))),
@@ -111,7 +115,12 @@ export function FoodNameCombobox({
         }`}
         // preventDefault keeps focus on the input so blur doesn't swallow the click
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => select(option)}
+        onClick={() => {
+          select(option);
+          // Tap-selecting is done with the field; drop focus so the on-screen
+          // keyboard dismisses. (Enter-selection keeps focus for keyboard flow.)
+          inputRef.current?.blur();
+        }}
       >
         {option.kind === 'food' ? (
           <>
@@ -134,6 +143,7 @@ export function FoodNameCombobox({
     <div className="combobox">
       <input
         id={inputId}
+        ref={inputRef}
         value={value}
         role="combobox"
         aria-expanded={expanded}
@@ -149,7 +159,7 @@ export function FoodNameCombobox({
         onFocus={() => setOpen(true)}
         onBlur={close}
         onKeyDown={handleKeyDown}
-        autoFocus
+        autoFocus={autoFocus}
       />
       {expanded && (
         <ul className="combobox-list" id={listId} role="listbox">

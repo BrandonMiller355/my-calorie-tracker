@@ -197,9 +197,14 @@ body {
   padding: 10px 12px;
 }
 
-.summary-card.over {
+.summary-card.over-bad {
   border-color: var(--danger);
   background: var(--danger-soft);
+}
+
+.summary-card.over-good {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .summary-label {
@@ -225,8 +230,13 @@ body {
   color: var(--accent);
 }
 
-.summary-card.over .summary-remaining {
+.summary-card.over-bad .summary-remaining {
   color: var(--danger);
+  font-weight: 600;
+}
+
+.summary-card.over-good .summary-remaining {
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -434,6 +444,18 @@ body {
 
 .entry-form h2 {
   margin: 0;
+}
+
+.entry-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.identify-button {
+  padding: 6px 10px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .entry-form .field {
@@ -966,6 +988,51 @@ label.flagged input {
 .ai-accept:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* AI identify */
+.identify-message {
+  color: white;
+  margin: 0;
+  text-align: center;
+}
+
+.identify-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.identify-candidate {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.identify-candidate-name {
+  font-weight: 600;
+}
+
+.identify-candidate-desc {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.identify-candidate-cal {
+  font-size: 13px;
 }
 
 /* Food library */

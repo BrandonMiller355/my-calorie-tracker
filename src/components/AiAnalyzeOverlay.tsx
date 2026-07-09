@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { analyzeFood, mapEstimateToResult, type FoodEstimate } from '../api/analyzeFood';
 import type { FoodSearchResult } from '../types';
 import { PhotoCapture } from './PhotoCapture';
+import { PhotoConfirm } from './PhotoConfirm';
 
 // The whole conversation — photo, corrections, estimates — lives in this
 // component's state and dies with it. Nothing here is persisted anywhere.
@@ -22,6 +23,10 @@ interface AiAnalyzeOverlayProps {
   onCancel: () => void;
   /** Rendered under camera/analysis errors (e.g. a manual-entry link). */
   fallback?: ReactNode;
+  /** Photo handed over by another flow (e.g. identify's no-match fallback); skips capture and enters at the pre-send review. */
+  initialImage?: string;
+  /** Context note carried over alongside `initialImage`. */
+  initialNote?: string;
 }
 
 /**
@@ -29,11 +34,19 @@ interface AiAnalyzeOverlayProps {
  * the analyze-food Edge Function, optionally refine it with corrections, and
  * accept it into the add-entry prefill flow as a one-serving search result.
  */
-export function AiAnalyzeOverlay({ onAccept, onCancel, fallback }: AiAnalyzeOverlayProps) {
-  const [phase, setPhase] = useState<Phase>({ kind: 'capturing' });
-  const [image, setImage] = useState<string | null>(null);
+export function AiAnalyzeOverlay({
+  onAccept,
+  onCancel,
+  fallback,
+  initialImage,
+  initialNote,
+}: AiAnalyzeOverlayProps) {
+  const [phase, setPhase] = useState<Phase>(
+    initialImage ? { kind: 'confirming' } : { kind: 'capturing' },
+  );
+  const [image, setImage] = useState<string | null>(initialImage ?? null);
   /** Optional context note typed on the pre-send review step; sent as the first correction. */
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(initialNote ?? '');
   /** Corrections the model has successfully incorporated, oldest first (the note, once sent, is corrections[0]). */
   const [corrections, setCorrections] = useState<string[]>([]);
   const [correctionInput, setCorrectionInput] = useState('');
@@ -103,35 +116,17 @@ export function AiAnalyzeOverlay({ onAccept, onCancel, fallback }: AiAnalyzeOver
     );
   }
 
-  if (phase.kind === 'confirming') {
+  if (phase.kind === 'confirming' && image) {
     return (
-      <div className="scanner-overlay" role="dialog" aria-label="Review photo before sending">
-        <div className="ai-confirm">
-          {image && <img src={image} alt="Captured food" className="ai-photo" />}
-          <label htmlFor="ai-note" className="ai-refine-label">
-            Add context for the AI (optional), e.g. “I didn’t eat the ranch”
-          </label>
-          <textarea
-            id="ai-note"
-            className="ai-note-input"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Anything the photo doesn't show?"
-            rows={2}
-          />
-          <div className="ai-confirm-actions">
-            <button type="button" className="secondary" onClick={handleRetake}>
-              Retake
-            </button>
-            <button type="button" className="ai-accept" onClick={handleSend}>
-              Analyze
-            </button>
-          </div>
-        </div>
-        <button type="button" className="scanner-cancel secondary" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
+      <PhotoConfirm
+        image={image}
+        note={note}
+        onNoteChange={setNote}
+        onRetake={handleRetake}
+        onSend={handleSend}
+        onCancel={onCancel}
+        sendLabel="Analyze"
+      />
     );
   }
 

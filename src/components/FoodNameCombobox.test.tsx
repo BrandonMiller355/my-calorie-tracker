@@ -85,9 +85,34 @@ describe('FoodNameCombobox', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('clicking an option selects it', () => {
-    const { onSelectFood } = setup();
+  it('clicking an option selects it and blurs the input (dismisses mobile keyboard)', () => {
+    const { onSelectFood, input } = setup();
+    input.focus();
     fireEvent.click(screen.getByRole('option', { name: /Banana/ }));
     expect(onSelectFood).toHaveBeenCalledWith(banana);
+    expect(input).not.toHaveFocus();
+  });
+
+  it('Enter-selecting keeps focus on the input', () => {
+    const { input } = setup();
+    input.focus();
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).toHaveFocus();
+  });
+
+  it('autoFocus={false} leaves the input unfocused and the list closed', () => {
+    render(
+      <FoodNameCombobox
+        value="Greek yogurt"
+        onChange={vi.fn()}
+        groups={[{ label: 'My foods', foods: [yogurt] }]}
+        actions={[]}
+        onSelectFood={vi.fn()}
+        autoFocus={false}
+      />,
+    );
+    expect(screen.getByRole('combobox')).not.toHaveFocus();
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 });

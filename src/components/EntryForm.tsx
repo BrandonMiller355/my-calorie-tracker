@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { IdentifiedAmount } from '../api/identifyFood';
 import { checkMacroCalories } from '../lib/macroCheck';
 import { findFoodByName, matchFoods } from '../lib/foodMatch';
 import { availableUnits, deriveQuantity, MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
@@ -23,7 +24,9 @@ import {
   type MealSuggestions,
   type ServingAnchor,
 } from '../types';
+import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
+import { IdentifyOverlay } from './IdentifyOverlay';
 
 export interface EntryFormProps {
   date: string;
@@ -155,6 +158,16 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   // dragging a text selection from the name field past the dialog edge
   // doesn't dismiss the form on mouseup.
   const [backdropMouseDown, setBackdropMouseDown] = useState(false);
+  /** Identify-from-photo overlay is open */
+  const [identifying, setIdentifying] = useState(false);
+  /** Photo + note handed from identify's no-match to the AI estimate flow */
+  const [estimateHandoff, setEstimateHandoff] = useState<{ image: string; note: string } | null>(
+    null,
+  );
+  /** The prefilled amount is the model's visual judgment, not a scale read */
+  const [aiEstimatedWeight, setAiEstimatedWeight] = useState(false);
+  /** Filled by an accepted AI estimate; classifies the entry like a search prefill */
+  const [aiPrefilled, setAiPrefilled] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,6 +193,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   );
 
   function setField(key: keyof EntryFormValues, value: string) {
+    // Once the user touches the amount, the AI-estimated-weight caveat is stale
+    if (key === 'amount' || key === 'unit') setAiEstimatedWeight(false);
     setValues((v) => ({ ...v, [key]: value }));
   }
 
@@ -307,6 +322,43 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     }));
   }
 
+  /** An identify match fills the form like a combobox pick, plus the weight when usable. */
+  function handleIdentified(food: LibraryFood, amount?: IdentifiedAmount) {
+    selectFood(food);
+    // Grams only drive the amount when the food's anchor can convert them
+    const units = availableUnits({ servingLabel: food.servingLabel, servingSize: food.servingSize });
+    if (amount && units.includes('g')) {
+      setValues((v) => ({ ...v, amount: String(round1(amount.grams)), unit: 'g' }));
+      setAiEstimatedWeight(amount.source === 'estimate');
+    } else {
+      setAiEstimatedWeight(false);
+    }
+    setIdentifying(false);
+  }
+
+  /**
+   * An accepted AI estimate fills the form in place as a new one-serving food,
+   * mirroring what a search prefill seeds at mount.
+   */
+  function applyEstimate(result: FoodSearchResult) {
+    setFoodId(undefined);
+    setDescription('');
+    setAnchorFields(anchorToFields(result));
+    setAiEstimatedWeight(false);
+    setAiPrefilled(true);
+    setValues((v) => ({
+      ...v,
+      name: result.name,
+      amount: '1',
+      unit: result.servingLabel,
+      calories: numToField(result.calories),
+      carbs: numToField(result.carbs),
+      protein: numToField(result.protein),
+      fat: numToField(result.fat),
+    }));
+    setEstimateHandoff(null);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
@@ -351,7 +403,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           quantity,
           date,
           meal,
-          source: prefill ? 'search' : 'manual',
+          source: prefill || aiPrefilled ? 'search' : 'manual',
           foodId,
           description: description.trim() || undefined,
         });
@@ -389,7 +441,20 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         onSubmit={handleSubmit}
         aria-label={editing ? 'Edit food entry' : 'Add food entry'}
       >
-        <h2>{editing ? 'Edit food' : 'Add food'}</h2>
+        <div className="entry-form-header">
+          <h2>{editing ? 'Edit food' : 'Add food'}</h2>
+          {!editing && (
+            <button
+              type="button"
+              className="identify-button secondary"
+              onClick={() => setIdentifying(true)}
+              aria-label="Identify food from a photo"
+              title="Identify food from a photo"
+            >
+              📷✨
+            </button>
+          )}
+        </div>
 
         {missingFromSearch.size > 0 && (
           <p className="form-note" role="alert">
@@ -412,6 +477,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             groups={groups}
             actions={actions}
             onSelectFood={selectFood}
+            // A prefilled or edited name is settled; don't pop the dropdown
+            // and mobile keyboard until the user taps the field themselves
+            autoFocus={!editing && !prefill}
           />
           {errors.name && <span className="field-error">{errors.name}</span>}
           {matchedFood?.description && (
@@ -468,6 +536,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           </div>
           {(errors.amount || errors.unit) && (
             <span className="field-error">{errors.amount ?? errors.unit}</span>
+          )}
+          {aiEstimatedWeight && (
+            <p className="form-note">Weight estimated by AI from the photo — check it.</p>
           )}
         </div>
 
@@ -562,6 +633,27 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           </button>
         </div>
       </form>
+
+      {identifying && (
+        <IdentifyOverlay
+          foods={foods}
+          onMatch={handleIdentified}
+          onEstimateFallback={(image, note) => {
+            setIdentifying(false);
+            setEstimateHandoff({ image, note });
+          }}
+          onCancel={() => setIdentifying(false)}
+        />
+      )}
+
+      {estimateHandoff && (
+        <AiAnalyzeOverlay
+          initialImage={estimateHandoff.image}
+          initialNote={estimateHandoff.note}
+          onAccept={applyEstimate}
+          onCancel={() => setEstimateHandoff(null)}
+        />
+      )}
     </div>
   );
 }

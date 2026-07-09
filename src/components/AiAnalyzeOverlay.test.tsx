@@ -247,6 +247,65 @@ describe('AiAnalyzeOverlay', () => {
     );
   });
 
+  it('starts at the pre-send review when given an initial photo and note', () => {
+    render(
+      <AiAnalyzeOverlay
+        onAccept={() => {}}
+        onCancel={() => {}}
+        initialImage="data:image/jpeg;base64,handoff"
+        initialNote="cooked weight"
+      />,
+    );
+
+    // No capture step: straight to review with the handed-over photo and note
+    expect(screen.queryByText('stub-capture')).not.toBeInTheDocument();
+    expect(screen.getByAltText('Captured food')).toHaveAttribute(
+      'src',
+      'data:image/jpeg;base64,handoff',
+    );
+    expect(screen.getByLabelText(/Add context for the AI/)).toHaveValue('cooked weight');
+    expect(analyzeFoodMock).not.toHaveBeenCalled();
+  });
+
+  it('retake after a handoff discards the supplied photo and opens photo-source selection', () => {
+    render(
+      <AiAnalyzeOverlay
+        onAccept={() => {}}
+        onCancel={() => {}}
+        initialImage="data:image/jpeg;base64,handoff"
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Retake'));
+
+    expect(screen.getByText('stub-capture')).toBeInTheDocument();
+    expect(analyzeFoodMock).not.toHaveBeenCalled();
+  });
+
+  it('sends the handed-over photo with the note and accepts into onAccept', async () => {
+    const onAccept = vi.fn();
+    render(
+      <AiAnalyzeOverlay
+        onAccept={onAccept}
+        onCancel={() => {}}
+        initialImage="data:image/jpeg;base64,handoff"
+        initialNote="cooked weight"
+      />,
+    );
+
+    send();
+    await screen.findByText('Chicken and rice');
+
+    expect(analyzeFoodMock).toHaveBeenCalledWith(
+      { image: 'data:image/jpeg;base64,handoff', corrections: ['cooked weight'] },
+      expect.anything(),
+    );
+
+    fireEvent.click(screen.getByText('Use this estimate'));
+    expect(onAccept).toHaveBeenCalledTimes(1);
+    expect(onAccept.mock.calls[0][0]).toMatchObject({ name: 'Chicken and rice' });
+  });
+
   it('applies later refinements after the note', async () => {
     render(<AiAnalyzeOverlay onAccept={() => {}} onCancel={() => {}} />);
 

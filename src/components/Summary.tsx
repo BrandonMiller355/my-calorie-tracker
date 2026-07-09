@@ -24,8 +24,9 @@ export function Summary({
         const goal = goals[key];
         const remaining = Math.round((goal - consumed) * 10) / 10;
         const over = remaining < 0;
+        const overClass = over ? (key === 'calories' ? ' over-bad' : ' over-good') : '';
         return (
-          <div key={key} className={`summary-card${over ? ' over' : ''}`}>
+          <div key={key} className={`summary-card${overClass}`}>
             <div className="summary-label">{label}</div>
             <div className="summary-consumed">
               {consumed} <span className="summary-unit">/ {goal} {unit}</span>
