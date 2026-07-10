@@ -9,7 +9,9 @@
 // turns so far, so nothing about a conversation exists server-side. See
 // openspec/changes/ai-analyze-photo/design.md.
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+// 2.5-flash started returning 404 in July 2026 (retired from the API ahead
+// of the published date); 3.5-flash is the current Flash-tier model.
+const GEMINI_MODEL = 'gemini-3.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // The SPA origin (GitHub Pages) differs from the functions origin, so CORS
@@ -137,9 +139,10 @@ Deno.serve(async (req) => {
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: RESPONSE_SCHEMA,
-      // A nutrition guess doesn't need extended reasoning; skipping it keeps
-      // the response fast and the free-tier token spend minimal.
-      thinkingConfig: { thinkingBudget: 0 },
+      // A nutrition guess doesn't need extended reasoning; the floor keeps
+      // the response fast and the free-tier token spend minimal. (Gemini 3.x
+      // takes thinkingLevel; the 2.x thinkingBudget field is rejected.)
+      thinkingConfig: { thinkingLevel: 'minimal' },
     },
   };
 

@@ -8,7 +8,7 @@
 - [x] 2.1 Create `supabase/functions/identify-food/index.ts` following the `analyze-food` skeleton (CORS, method guard, `GEMINI_API_KEY` secret, `gemini-2.5-flash`, response-schema JSON): request `{ image, note?, foods: [{ id, name, description?, servingLabel, servingGrams? }] }`, response `{ candidates: [{ id, confidence }], amount?: { grams, source: 'scale' | 'estimate' } }`
 - [x] 2.2 Write the identification prompt: match only against the provided food list; one candidate when confident, 2–3 when torn, none when nothing plausibly matches; read a legible scale display verbatim as net weight (convert oz/lb to grams) with source `scale`; otherwise judge portion vs `servingGrams` as source `estimate`; omit `amount` entirely when neither is reliable
 - [x] 2.3 Server-side revalidation: drop candidate ids not present in the request's food list, cap candidates at 3, require positive finite grams; return typed errors matching the analyze-food conventions
-- [ ] 2.4 Deploy the function with `verify_jwt` enabled and smoke-test authenticated vs unauthenticated calls
+- [x] 2.4 Deploy the function with `verify_jwt` enabled and smoke-test authenticated vs unauthenticated calls
 
 ## 3. Client API
 
@@ -32,4 +32,4 @@
 ## 6. Verification
 
 - [x] 6.1 Run the full test suite and typecheck; fix regressions
-- [ ] 6.2 End-to-end manual pass on a phone against the deployed function: confident match with scale weight, torn candidates, no-match → estimate handoff, unreadable scale (no amount), cancel at each step
+- [x] 6.2 End-to-end manual pass on a phone against the deployed function: confident match with scale weight, torn candidates, no-match → estimate handoff, unreadable scale (no amount), cancel at each step
