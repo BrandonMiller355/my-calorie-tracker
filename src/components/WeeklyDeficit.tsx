@@ -12,7 +12,7 @@ export function WeeklyDeficit({
   return (
     <section className="weekly-deficit" aria-label="Weekly deficit">
       <div className="weekly-deficit-label">Weekly deficit</div>
-      <div className="weekly-deficit-value">
+      <div className={`weekly-deficit-value${deficit < 0 ? ' weekly-deficit-value-negative' : ''}`}>
         {deficit} <span className="weekly-deficit-unit">kcal</span>
       </div>
       {goal !== null &&

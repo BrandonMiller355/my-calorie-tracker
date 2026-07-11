@@ -18,6 +18,14 @@ describe('WeeklyDeficit', () => {
     expect(screen.getByText(/Goal met \(3500 kcal\) — 500 kcal extra/)).toBeInTheDocument();
   });
 
+  it('highlights the deficit value in red when negative', () => {
+    const { rerender } = render(<WeeklyDeficit deficit={800} goal={null} hasMissingDays={false} />);
+    expect(screen.getByText(/800/).closest('div')).not.toHaveClass('weekly-deficit-value-negative');
+
+    rerender(<WeeklyDeficit deficit={-200} goal={null} hasMissingDays={false} />);
+    expect(screen.getByText(/-200/).closest('div')).toHaveClass('weekly-deficit-value-negative');
+  });
+
   it('shows the missing-log disclaimer only when there are missing days', () => {
     const { rerender } = render(<WeeklyDeficit deficit={800} goal={null} hasMissingDays={false} />);
     expect(screen.queryByText(/missing log entries/)).toBeNull();

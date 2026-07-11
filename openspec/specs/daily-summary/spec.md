@@ -17,7 +17,7 @@ The system SHALL display, for the selected day, the total calories, carbs (g), p
 - **THEN** all totals display as zero
 
 ### Requirement: Daily goals
-The system SHALL let the user set daily goals for calorie burn, carbs, protein, and fat, persist them, and apply them to every day until changed. The calorie value represents an estimated calorie burn ceiling (typically sourced from an external activity tracker) rather than a fixed diet target, and is labeled "Calorie burn" wherever shown or edited.
+The system SHALL let the user set daily goals for calorie burn, carbs, protein, and fat, persist them, and apply them to every day until changed. The calorie value represents an estimated calorie burn ceiling (typically sourced from an external activity tracker) rather than a fixed diet target. It is labeled "Calorie burn" where the goal is set or edited (Settings, day goal editor); the daily summary on the log page labels it "Calories" for brevity.
 
 #### Scenario: Set goals
 - **WHEN** the user saves new goal values in settings

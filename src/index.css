@@ -274,6 +274,10 @@ body {
   font-weight: 400;
 }
 
+.weekly-deficit-value-negative {
+  color: var(--danger);
+}
+
 .weekly-deficit-goal {
   font-size: 13px;
   color: var(--accent);
