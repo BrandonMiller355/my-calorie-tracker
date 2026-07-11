@@ -212,9 +212,9 @@ async function addFood(
   food: { name: string; calories: string; carbs: string; protein: string; fat: string },
 ) {
   const section = await screen.findByRole('region', { name: meal });
-  fireEvent.click(within(section).getByText('+ Add food'));
+  fireEvent.click(within(section).getByText('+ Log food'));
 
-  const form = screen.getByRole('form', { name: 'Add food entry' });
+  const form = screen.getByRole('form', { name: 'Log food entry' });
   fireEvent.change(within(form).getByLabelText('Name'), { target: { value: food.name } });
   fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: food.calories } });
   fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: food.carbs } });
@@ -223,7 +223,7 @@ async function addFood(
   fireEvent.click(within(form).getByText('Add to log'));
 
   await waitFor(() =>
-    expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull(),
+    expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull(),
   );
 }
 
@@ -273,9 +273,9 @@ describe('App (spec scenario walkthrough)', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderApp(new FakeRepository());
     const section = await screen.findByRole('region', { name: 'Lunch' });
-    fireEvent.click(within(section).getByText('+ Add food'));
+    fireEvent.click(within(section).getByText('+ Log food'));
 
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Suspicious bar' } });
     // 5*4 + 1*4 + 1*9 = 33 kcal from macros, nowhere near 400
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '400' } });
@@ -287,7 +287,7 @@ describe('App (spec scenario walkthrough)', () => {
     // Declining the warning keeps the form open and saves nothing
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('33'));
     expect(screen.queryByText('Suspicious bar')).toBeNull();
-    expect(screen.getByRole('form', { name: 'Add food entry' })).toBeInTheDocument();
+    expect(screen.getByRole('form', { name: 'Log food entry' })).toBeInTheDocument();
 
     // Confirming the warning proceeds with the save
     confirmSpy.mockReturnValue(true);
@@ -298,9 +298,9 @@ describe('App (spec scenario walkthrough)', () => {
   it('rejects invalid nutrition values without saving', async () => {
     renderApp(new FakeRepository());
     const section = await screen.findByRole('region', { name: 'Lunch' });
-    fireEvent.click(within(section).getByText('+ Add food'));
+    fireEvent.click(within(section).getByText('+ Log food'));
 
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Bad food' } });
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '-5' } });
     fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: 'abc' } });
@@ -370,7 +370,7 @@ describe('App (spec scenario walkthrough)', () => {
     };
     renderApp(new FakeRepository(), [{ pathname: '/', state: { prefill } }]);
 
-    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByRole('alert')).toHaveTextContent(/missing/i);
     expect(within(form).getByLabelText(/Calories/)).toHaveValue('200');
     expect(within(form).getByLabelText(/Carbs/)).toHaveValue('');
@@ -394,7 +394,7 @@ describe('App (spec scenario walkthrough)', () => {
     };
     renderApp(new FakeRepository(), [{ pathname: '/', state: { prefill } }]);
 
-    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).not.toHaveFocus();
     expect(within(form).queryByRole('listbox')).toBeNull();
   });
@@ -417,8 +417,8 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     await addFood('Dinner', { name: 'Pasta', calories: '600', carbs: '80', protein: '20', fat: '15' });
 
     const breakfast = screen.getByRole('region', { name: 'Breakfast' });
-    fireEvent.click(within(breakfast).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(breakfast).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
 
     expect(await screen.findByText('Recent · Breakfast')).toBeInTheDocument();
@@ -438,8 +438,8 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     });
 
     const breakfast = screen.getByRole('region', { name: 'Breakfast' });
-    fireEvent.click(within(breakfast).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(breakfast).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
     fireEvent.click(await screen.findByRole('option', { name: /Greek yogurt/ }));
 
@@ -456,8 +456,8 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
 
     // Log once with a description; it seeds the captured library food
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    let form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'PB&J' } });
     fireEvent.change(within(form).getByLabelText(/Description/), {
       target: { value: '16g pbfit, 2 sara lee slices' },
@@ -467,11 +467,11 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '14' } });
     fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '12' } });
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
 
     // A search on description text finds it
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'pbfit' } });
 
     const option = await screen.findByRole('option', { name: /PB&J/ });
@@ -481,8 +481,8 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
   it('offers search-online and use-as-new actions for unmatched text', async () => {
     renderApp(new FakeRepository());
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'zzz' } });
 
     expect(await screen.findByRole('option', { name: /Search online for “zzz”/ })).toBeInTheDocument();
@@ -500,15 +500,15 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
 
     // Re-log from the suggestion, editing nutrition through the reveal
     const lunch = screen.getByRole('region', { name: 'Lunch' });
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
     fireEvent.click(await screen.findByRole('option', { name: /Rice/ }));
     fireEvent.click(within(form).getByText('Edit nutrition'));
     expect(within(form).getByText('Updates your food library')).toBeInTheDocument();
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '250' } });
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
 
     // The library now reflects the edited value, for future logs
     fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
@@ -523,12 +523,12 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     // Log it again for dinner, linked to the same library food (recent/most-used
     // suggestions are per-meal, so type the name to search the library instead)
     const dinner = screen.getByRole('region', { name: 'Dinner' });
-    fireEvent.click(within(dinner).getByText('+ Add food'));
-    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(dinner).getByText('+ Log food'));
+    let form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Rice' } });
     fireEvent.click(await screen.findByRole('option', { name: /^Rice/ }));
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
 
     // Edit only the dinner entry's nutrition
     fireEvent.click(within(dinner).getByText('Rice'));
@@ -552,15 +552,15 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     renderApp(new FakeRepository());
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
 
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Odd snack' } });
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '80' } });
     fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '10' } });
     fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '2' } });
     fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '1' } });
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
 
     // Archive the auto-captured food so the entry's link no longer resolves
     fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
@@ -587,8 +587,8 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     await addFood('Snacks', { name: 'Tuna', calories: '90', carbs: '0', protein: '20', fat: '1' });
 
     const snacks = screen.getByRole('region', { name: 'Snacks' });
-    fireEvent.click(within(snacks).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(snacks).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
     fireEvent.click(await screen.findByRole('option', { name: /Tuna/ }));
     fireEvent.click(within(form).getByText('Edit nutrition'));
@@ -603,7 +603,7 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     fireEvent.change(within(form).getByLabelText('Equals'), { target: { value: '120' } });
     fireEvent.change(within(form).getByLabelText('Serving unit'), { target: { value: 'g' } });
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
 
     fireEvent.click(screen.getByRole('link', { name: 'Foods' }));
     expect(await screen.findByText(/1 can \(drained\) = 120 g/)).toBeInTheDocument();
@@ -626,8 +626,8 @@ describe('Search escalation round trip', () => {
     vi.mocked(searchFoods).mockResolvedValue([granola]);
     renderApp(new FakeRepository());
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    let form = screen.getByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
 
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'granola' } });
@@ -637,7 +637,7 @@ describe('Search escalation round trip', () => {
     expect(await screen.findByPlaceholderText(/Open Food Facts/)).toHaveValue('granola');
     fireEvent.click(await screen.findByRole('button', { name: /Granola/ }));
 
-    form = await screen.findByRole('form', { name: 'Add food entry' });
+    form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
     expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
   });
@@ -651,7 +651,7 @@ describe('Search escalation round trip', () => {
     });
     fireEvent.click(await screen.findByRole('button', { name: /Granola/ }));
 
-    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
     expect(within(form).getByLabelText('Meal')).toHaveValue('snacks');
   });
@@ -714,7 +714,7 @@ describe('Barcode scanning', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Scan a barcode/ }));
     fireEvent.click(screen.getByText('Simulate scan'));
 
-    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Skyr');
     expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
     expect(getProductByBarcode).toHaveBeenCalledWith(SCANNED_CODE, expect.anything());
@@ -752,7 +752,7 @@ describe('Barcode scanning', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Barcode lookup is unavailable/);
 
     fireEvent.click(screen.getByText('Retry'));
-    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Skyr');
     expect(getProductByBarcode).toHaveBeenCalledTimes(2);
     expect(vi.mocked(getProductByBarcode).mock.calls[1][0]).toBe(SCANNED_CODE);
@@ -776,7 +776,7 @@ describe('AI photo analysis', () => {
     fireEvent.click(await screen.findByRole('button', { name: /AI analyze/ }));
     fireEvent.click(screen.getByText('Simulate accept'));
 
-    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Chicken and rice');
     expect(within(form).getByLabelText('Meal')).toHaveValue('dinner');
   });
@@ -865,8 +865,8 @@ describe('Food library screen', () => {
     expect(screen.getByText('1850 kcal left')).toBeInTheDocument();
 
     const snacks = screen.getByRole('region', { name: 'Snacks' });
-    fireEvent.click(within(snacks).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(snacks).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
     // suggestions resolve within a waitFor poll; the archived food never shows
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
@@ -911,7 +911,7 @@ describe('Structured serving units', () => {
     };
     renderApp(new FakeRepository(), [{ pathname: '/', state: { prefill } }]);
 
-    const form = await screen.findByRole('form', { name: 'Add food entry' });
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '45' } });
     fireEvent.change(within(form).getByLabelText('Unit'), { target: { value: 'g' } });
 
@@ -929,9 +929,9 @@ describe('Structured serving units', () => {
   it('a count-only food offers only its label and multiplies by count', async () => {
     renderApp(new FakeRepository());
     const dinner = await screen.findByRole('region', { name: 'Dinner' });
-    fireEvent.click(within(dinner).getByText('+ Add food'));
+    fireEvent.click(within(dinner).getByText('+ Log food'));
 
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Chili' } });
     fireEvent.change(within(form).getByLabelText('Serving name'), { target: { value: 'bowl' } });
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '300' } });
@@ -945,16 +945,16 @@ describe('Structured serving units', () => {
     fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '2' } });
     fireEvent.click(within(form).getByText('Add to log'));
 
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
     expect(screen.getByText('1400 kcal left')).toBeInTheDocument();
   });
 
   it('rejects a measure unit name as the serving label', async () => {
     renderApp(new FakeRepository());
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
-    fireEvent.click(within(lunch).getByText('+ Add food'));
+    fireEvent.click(within(lunch).getByText('+ Log food'));
 
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Sugar' } });
     fireEvent.change(within(form).getByLabelText('Serving name'), { target: { value: 'g' } });
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '16' } });
@@ -969,8 +969,8 @@ describe('Structured serving units', () => {
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
 
     // Define "1 can (drained) = 120 g" while logging a new food
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    let form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Tuna' } });
     fireEvent.change(within(form).getByLabelText('Serving name'), {
       target: { value: 'can (drained)' },
@@ -980,12 +980,12 @@ describe('Structured serving units', () => {
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '100' } });
     fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '22' } });
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
     expect(screen.getByText('1900 kcal left')).toBeInTheDocument();
 
     // Re-log from the captured library food: label and weight units offered
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
     fireEvent.click(await screen.findByRole('option', { name: /Tuna/ }));
 
@@ -1002,7 +1002,7 @@ describe('Structured serving units', () => {
     fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '60' } });
     fireEvent.change(within(form).getByLabelText('Unit'), { target: { value: 'g' } });
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
     expect(screen.getByText('1850 kcal left')).toBeInTheDocument();
   });
 
@@ -1011,8 +1011,8 @@ describe('Structured serving units', () => {
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
 
     // Log 45 g of a food defined as 1 serving = 100 g, 200 kcal
-    fireEvent.click(within(lunch).getByText('+ Add food'));
-    let form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(lunch).getByText('+ Log food'));
+    let form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Oats' } });
     fireEvent.change(within(form).getByLabelText(/Equals/), { target: { value: '100' } });
     fireEvent.change(within(form).getByLabelText('Serving unit'), { target: { value: 'g' } });
@@ -1020,7 +1020,7 @@ describe('Structured serving units', () => {
     fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '45' } });
     fireEvent.change(within(form).getByLabelText('Unit'), { target: { value: 'g' } });
     fireEvent.click(within(form).getByText('Add to log'));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add food entry' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
     expect(screen.getByText('1910 kcal left')).toBeInTheDocument();
 
     // Remove the library food's equivalence entirely
@@ -1067,8 +1067,8 @@ describe('App (backend failure handling)', () => {
     const section = await screen.findByRole('region', { name: 'Breakfast' });
     repo.failWrites = true;
 
-    fireEvent.click(within(section).getByText('+ Add food'));
-    const form = screen.getByRole('form', { name: 'Add food entry' });
+    fireEvent.click(within(section).getByText('+ Log food'));
+    const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Doomed toast' } });
     fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '100' } });
     fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '10' } });

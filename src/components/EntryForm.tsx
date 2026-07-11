@@ -439,10 +439,10 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         className="entry-form"
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
-        aria-label={editing ? 'Edit food entry' : 'Add food entry'}
+        aria-label={editing ? 'Edit food entry' : 'Log food entry'}
       >
         <div className="entry-form-header">
-          <h2>{editing ? 'Edit food' : 'Add food'}</h2>
+          <h2>{editing ? 'Edit food' : 'Log food'}</h2>
           {!editing && (
             <button
               type="button"

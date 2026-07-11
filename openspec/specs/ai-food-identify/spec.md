@@ -5,11 +5,11 @@ Log a food already in the personal library without typing its name or weight: ph
 
 ## Requirements
 
-### Requirement: Identify entry point in the Add Food dialog
-The Add Food dialog (entry form in add mode) SHALL offer an "identify from photo" camera action at the top right whenever a photo source (camera capture or file selection) is available. The action MUST NOT be rendered when editing an existing entry, and all other entry-form behavior SHALL be unchanged when the action is unused.
+### Requirement: Identify entry point in the Log Food dialog
+The Log Food dialog (entry form in add mode) SHALL offer an "identify from photo" camera action at the top right whenever a photo source (camera capture or file selection) is available. The action MUST NOT be rendered when editing an existing entry, and all other entry-form behavior SHALL be unchanged when the action is unused.
 
 #### Scenario: Action shown when adding
-- **WHEN** the user opens the Add Food dialog in a browser with a photo source available
+- **WHEN** the user opens the Log Food dialog in a browser with a photo source available
 - **THEN** the identify-from-photo action is visible at the top of the dialog
 
 #### Scenario: Action hidden when editing

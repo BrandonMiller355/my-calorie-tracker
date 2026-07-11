@@ -63,7 +63,7 @@ export function MealSection({
         </ul>
       )}
       <button className="meal-add" onClick={onAdd}>
-        + Add food
+        + Log food
       </button>
     </section>
   );
