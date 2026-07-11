@@ -24,9 +24,11 @@ import {
   type MealSuggestions,
   type ServingAnchor,
 } from '../types';
+import type { ResolvedTextLogItem } from '../api/logFromText';
 import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
 import { IdentifyOverlay } from './IdentifyOverlay';
+import { TextLogOverlay } from './TextLogOverlay';
 
 export interface EntryFormProps {
   date: string;
@@ -160,6 +162,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const [backdropMouseDown, setBackdropMouseDown] = useState(false);
   /** Identify-from-photo overlay is open */
   const [identifying, setIdentifying] = useState(false);
+  /** Log-from-text overlay is open */
+  const [textLogging, setTextLogging] = useState(false);
   /** Photo + note handed from identify's no-match to the AI estimate flow */
   const [estimateHandoff, setEstimateHandoff] = useState<{ image: string; note: string } | null>(
     null,
@@ -236,7 +240,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const unitOptions = availableUnits(activeAnchor);
   // When the anchor changes under the form (food selected, definition edited),
   // a unit it no longer offers falls back to the count label.
-  const optionsKey = unitOptions.join(' ');
+  const optionsKey = unitOptions.join('\0');
   useEffect(() => {
     setValues((v) => (unitOptions.includes(v.unit) ? v : { ...v, unit: unitOptions[0] }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,6 +338,35 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
       setAiEstimatedWeight(false);
     }
     setIdentifying(false);
+  }
+
+  /**
+   * A single text-log item fills the form in place: a match exactly like an
+   * identify match (with the amount the user's words stated), an estimate
+   * exactly like an accepted photo estimate. Multi-item results never reach
+   * here — they bulk-log from the overlay's review list instead.
+   */
+  function handleTextItem(item: ResolvedTextLogItem) {
+    if (item.foodId) {
+      const food = foods.find((f) => f.id === item.foodId);
+      if (food) {
+        selectFood(food);
+        setValues((v) => ({ ...v, amount: String(item.amount), unit: item.unit }));
+        setAiEstimatedWeight(false);
+      }
+    } else {
+      applyEstimate({
+        id: crypto.randomUUID(),
+        name: item.name,
+        servingLabel: item.anchor.servingLabel,
+        calories: item.calories,
+        fat: item.fat,
+        carbs: item.carbs,
+        protein: item.protein,
+      });
+    }
+    setMeal(item.meal);
+    setTextLogging(false);
   }
 
   /**
@@ -444,15 +477,26 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         <div className="entry-form-header">
           <h2>{editing ? 'Edit food' : 'Log food'}</h2>
           {!editing && (
-            <button
-              type="button"
-              className="identify-button secondary"
-              onClick={() => setIdentifying(true)}
-              aria-label="Identify food from a photo"
-              title="Identify food from a photo"
-            >
-              📷✨
-            </button>
+            <>
+              <button
+                type="button"
+                className="identify-button secondary"
+                onClick={() => setTextLogging(true)}
+                aria-label="Log foods from a text description"
+                title="Log foods from a text description"
+              >
+                💬✨
+              </button>
+              <button
+                type="button"
+                className="identify-button secondary"
+                onClick={() => setIdentifying(true)}
+                aria-label="Identify food from a photo"
+                title="Identify food from a photo"
+              >
+                📷✨
+              </button>
+            </>
           )}
         </div>
 
@@ -633,6 +677,17 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           </button>
         </div>
       </form>
+
+      {textLogging && (
+        <TextLogOverlay
+          foods={foods}
+          date={date}
+          meal={meal}
+          onSingleItem={handleTextItem}
+          onLogged={onClose}
+          onCancel={() => setTextLogging(false)}
+        />
+      )}
 
       {identifying && (
         <IdentifyOverlay

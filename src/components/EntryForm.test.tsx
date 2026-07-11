@@ -48,6 +48,29 @@ vi.mock('./IdentifyOverlay', () => ({
   ),
 }));
 
+// What the text-log stub delivers when its buttons are clicked; set per test.
+const stubTextLog = vi.hoisted(() => ({
+  item: null as unknown,
+}));
+
+vi.mock('./TextLogOverlay', () => ({
+  TextLogOverlay: ({
+    onSingleItem,
+    onLogged,
+    onCancel,
+  }: {
+    onSingleItem: (item: unknown) => void;
+    onLogged: () => void;
+    onCancel: () => void;
+  }) => (
+    <div data-testid="text-log-overlay">
+      <button onClick={() => onSingleItem(stubTextLog.item)}>stub-single-item</button>
+      <button onClick={onLogged}>stub-logged</button>
+      <button onClick={onCancel}>stub-text-cancel</button>
+    </div>
+  ),
+}));
+
 vi.mock('./AiAnalyzeOverlay', () => ({
   AiAnalyzeOverlay: ({
     initialImage,
@@ -304,5 +327,103 @@ describe('EntryForm identify action', () => {
     });
     expect(repository.updateFoodCalls).toHaveLength(0);
     expect(repository.addFoodCalls).toHaveLength(0);
+  });
+});
+
+function openTextLog() {
+  fireEvent.click(screen.getByLabelText('Log foods from a text description'));
+}
+
+describe('EntryForm text-log action', () => {
+  it('shows the text-log action when adding', async () => {
+    await renderForm();
+    expect(screen.getByLabelText('Log foods from a text description')).toBeInTheDocument();
+  });
+
+  it('hides the text-log action when editing', async () => {
+    await renderForm({ editing: ENTRY });
+    expect(screen.queryByLabelText('Log foods from a text description')).not.toBeInTheDocument();
+  });
+
+  it('fills the form from a single match with its amount, unit, and meal', async () => {
+    stubTextLog.item = {
+      key: 'k1',
+      name: 'Chicken breast',
+      anchor: { servingLabel: 'serving', servingSize: { amount: 100, unit: 'g' } },
+      calories: 165,
+      fat: 4,
+      carbs: 0,
+      protein: 31,
+      amount: 150,
+      unit: 'g',
+      meal: 'dinner',
+      foodId: CHICKEN.id,
+      source: 'manual',
+    };
+    await renderForm();
+
+    openTextLog();
+    fireEvent.click(screen.getByText('stub-single-item'));
+    // Flush the meal change's async suggestions reload
+    await act(async () => {});
+
+    expect(screen.queryByTestId('text-log-overlay')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('Chicken breast');
+    expect(screen.getByLabelText('Amount')).toHaveValue('150');
+    expect(screen.getByLabelText('Unit')).toHaveValue('g');
+    expect(screen.getByLabelText('Meal')).toHaveValue('dinner');
+    // 1.5 servings of 165 kcal
+    expect(screen.getByTestId('entry-preview')).toHaveTextContent('247.5 kcal');
+  });
+
+  it('fills the form from a single estimate as a new one-serving food', async () => {
+    stubTextLog.item = {
+      key: 'k2',
+      name: 'Peanut butter toast',
+      anchor: { servingLabel: 'serving' },
+      calories: 250,
+      fat: 12,
+      carbs: 28,
+      protein: 9,
+      amount: 1,
+      unit: 'serving',
+      meal: 'breakfast',
+      source: 'search',
+      confidenceNote: 'assumed 1 tbsp of peanut butter',
+    };
+    await renderForm();
+
+    openTextLog();
+    fireEvent.click(screen.getByText('stub-single-item'));
+    // Flush the meal change's async suggestions reload
+    await act(async () => {});
+
+    expect(screen.getByLabelText('Name')).toHaveValue('Peanut butter toast');
+    expect(screen.getByLabelText('Amount')).toHaveValue('1');
+    expect(screen.getByLabelText('Unit')).toHaveValue('serving');
+    expect(screen.getByLabelText('Meal')).toHaveValue('breakfast');
+    // A new food's nutrition inputs are visible, seeded from the estimate
+    expect(screen.getByLabelText(/Calories/)).toHaveValue('250');
+  });
+
+  it('closes the whole dialog after a bulk log', async () => {
+    const onClose = vi.fn();
+    await renderForm({ onClose });
+
+    openTextLog();
+    fireEvent.click(screen.getByText('stub-logged'));
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('cancelling the text-log overlay leaves the form untouched', async () => {
+    await renderForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'half-typed' } });
+
+    openTextLog();
+    fireEvent.click(screen.getByText('stub-text-cancel'));
+
+    expect(screen.queryByTestId('text-log-overlay')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('half-typed');
   });
 });
