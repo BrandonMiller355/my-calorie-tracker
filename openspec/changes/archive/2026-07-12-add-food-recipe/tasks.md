@@ -31,6 +31,6 @@
 
 ## 6. Manual verification
 
-- [ ] 6.1 Apply the schema change to the Supabase project (dashboard SQL editor, per the note at the top of `supabase/schema.sql`)
-- [ ] 6.2 Log a brand-new food end to end with a recipe, then reselect it later and confirm the recipe is viewable
-- [ ] 6.3 Add a recipe to an existing library food from the Food Library screen and confirm it appears next time that food is matched while logging
+- [x] 6.1 Apply the schema change to the Supabase project (dashboard SQL editor, per the note at the top of `supabase/schema.sql`)
+- [x] 6.2 Log a brand-new food end to end with a recipe, then reselect it later and confirm the recipe is viewable
+- [x] 6.3 Add a recipe to an existing library food from the Food Library screen and confirm it appears next time that food is matched while logging
