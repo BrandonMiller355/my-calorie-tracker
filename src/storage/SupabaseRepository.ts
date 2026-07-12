@@ -97,6 +97,7 @@ interface FoodRow extends AnchorColumns {
   id: string;
   name: string;
   description: string | null;
+  recipe: string | null;
   calories: number;
   carbs: number;
   protein: number;
@@ -109,6 +110,7 @@ function toFoodRow(food: LibraryFood): FoodRow {
     id: food.id,
     name: food.name,
     description: food.description ?? null,
+    recipe: food.recipe ?? null,
     ...toAnchorColumns(food),
     calories: food.calories,
     carbs: food.carbs,
@@ -123,6 +125,7 @@ function fromFoodRow(row: FoodRow): LibraryFood {
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
+    recipe: row.recipe ?? undefined,
     ...fromAnchorColumns(row),
     calories: row.calories,
     carbs: row.carbs,

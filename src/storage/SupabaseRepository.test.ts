@@ -83,6 +83,7 @@ const food: LibraryFood = {
   id: 'food-1',
   name: 'PB&J',
   description: '15g jelly, 16g pbfit, 2 sara lee slices',
+  recipe: 'Spread pbfit, add jelly, close sandwich',
   servingLabel: 'sandwich',
   calories: 380,
   carbs: 45,
@@ -95,6 +96,7 @@ const foodRow = {
   id: 'food-1',
   name: 'PB&J',
   description: '15g jelly, 16g pbfit, 2 sara lee slices',
+  recipe: 'Spread pbfit, add jelly, close sandwich',
   serving_label: 'sandwich',
   serving_size_amount: null,
   serving_size_unit: null,
@@ -239,12 +241,12 @@ describe('SupabaseRepository', () => {
 
   it('addFood inserts a snake_case row, mapping missing optionals to null', async () => {
     const { client, calls } = fakeClient();
-    const { description: _d, ...bare } = food;
+    const { description: _d, recipe: _r, ...bare } = food;
     await new SupabaseRepository(client).addFood(bare);
 
     expect(calls).toEqual([
       { method: 'from', args: ['foods'] },
-      { method: 'insert', args: [{ ...foodRow, description: null }] },
+      { method: 'insert', args: [{ ...foodRow, description: null, recipe: null }] },
     ]);
   });
 

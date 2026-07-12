@@ -140,6 +140,10 @@ create policy "own foods update" on foods
 create policy "own foods delete" on foods
   for delete using (user_id = auth.uid());
 
+-- Free-text prep instructions, e.g. "Boil water... 53g powder... 7g salt...".
+-- Never snapshotted onto food_entries, same as description.
+alter table foods add column recipe text;
+
 -- Name-field suggestions: up to 3 foods most recently logged for the meal,
 -- then up to 3 most often logged for it, deduped across the two groups and
 -- excluding archived foods. security invoker (the default), so RLS on both
@@ -150,6 +154,7 @@ returns table (
   id uuid,
   name text,
   description text,
+  recipe text,
   serving_label text,
   serving_size_amount numeric,
   serving_size_unit text,
@@ -189,7 +194,7 @@ as $$
     union all
     select food_id, 'most_used' as suggestion_group, ord from most_used
   )
-  select f.id, f.name, f.description,
+  select f.id, f.name, f.description, f.recipe,
     f.serving_label, f.serving_size_amount, f.serving_size_unit,
     f.calories, f.carbs, f.protein, f.fat, f.source, r.suggestion_group
   from ranked r

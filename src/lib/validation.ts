@@ -92,6 +92,7 @@ export function validateServingAnchor(
 export interface FoodFormValues extends ServingAnchorFormValues {
   name: string;
   description: string;
+  recipe: string;
   calories: string;
   carbs: string;
   protein: string;
@@ -103,6 +104,7 @@ export type FoodFormErrors = Partial<Record<keyof FoodFormValues, string>>;
 export interface ParsedFoodValues extends ServingAnchor {
   name: string;
   description?: string;
+  recipe?: string;
   calories: number;
   carbs: number;
   protein: number;
@@ -141,6 +143,7 @@ export function validateFoodForm(
     parsed: {
       name,
       description: values.description.trim() || undefined,
+      recipe: values.recipe.trim() || undefined,
       ...anchor.parsed,
       calories: calories as number,
       carbs: nutrients.carbs as number,

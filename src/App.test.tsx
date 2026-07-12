@@ -478,6 +478,46 @@ describe('Food library (auto-capture, suggestions, combobox)', () => {
     expect(option).toHaveTextContent('16g pbfit, 2 sara lee slices');
   });
 
+  it('captures a recipe while defining a new food and shows it collapsed when logged again', async () => {
+    renderApp(new FakeRepository());
+    const dinner = await screen.findByRole('region', { name: 'Dinner' });
+
+    fireEvent.click(within(dinner).getByText('+ Log food'));
+    let form = screen.getByRole('form', { name: 'Log food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Cheesy mash' } });
+    fireEvent.click(within(form).getByText('+ Add recipe'));
+    fireEvent.change(within(form).getByLabelText(/Recipe/), {
+      target: { value: 'Boil water, add 53g powder, 7g salt, 10g cheese powder.' },
+    });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '350' } });
+    fireEvent.change(within(form).getByLabelText(/Carbs/), { target: { value: '40' } });
+    fireEvent.change(within(form).getByLabelText(/Protein/), { target: { value: '10' } });
+    fireEvent.change(within(form).getByLabelText(/Fat \(g\)/), { target: { value: '15' } });
+    fireEvent.click(within(form).getByText('Add to log'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull());
+
+    // Log it again; the recipe is viewable but starts collapsed
+    fireEvent.click(within(dinner).getByText('+ Log food'));
+    form = screen.getByRole('form', { name: 'Log food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Cheesy mash' } });
+    fireEvent.click(await screen.findByRole('option', { name: /^Cheesy mash/ }));
+
+    expect(screen.queryByText(/Boil water/)).toBeNull();
+    fireEvent.click(within(form).getByText('View recipe'));
+    expect(within(form).getByText(/Boil water, add 53g powder/)).toBeInTheDocument();
+  });
+
+  it('shows no recipe control when editing an entry or the matched food has none', async () => {
+    renderApp(new FakeRepository());
+    await addFood('Lunch', { name: 'Rice', calories: '200', carbs: '45', protein: '4', fat: '1' });
+
+    const lunch = screen.getByRole('region', { name: 'Lunch' });
+    fireEvent.click(within(lunch).getByText('Rice'));
+    const editForm = await screen.findByRole('form', { name: 'Edit food entry' });
+    expect(within(editForm).queryByText('+ Add recipe')).toBeNull();
+    expect(within(editForm).queryByText('View recipe')).toBeNull();
+  });
+
   it('offers search-online and use-as-new actions for unmatched text', async () => {
     renderApp(new FakeRepository());
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
@@ -894,6 +934,26 @@ describe('Food library screen', () => {
 
     fireEvent.change(filter, { target: { value: '' } });
     expect(screen.getByText('Rice')).toBeInTheDocument();
+  });
+
+  it('adds a recipe from the library screen and views it collapsed', async () => {
+    renderApp(new FakeRepository(), ['/foods']);
+    fireEvent.click(await screen.findByText('+ Add food item'));
+
+    const form = screen.getByRole('form', { name: 'Add library food' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Cheesy mash' } });
+    fireEvent.change(within(form).getByLabelText(/Calories/), { target: { value: '350' } });
+    fireEvent.click(within(form).getByText('+ Add recipe'));
+    fireEvent.change(within(form).getByLabelText(/Recipe/), {
+      target: { value: 'Boil water, add 53g powder, 7g salt, 10g cheese powder.' },
+    });
+    fireEvent.click(within(form).getByText('Add to library'));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add library food' })).toBeNull());
+
+    // Collapsed by default in the library list
+    expect(screen.queryByText(/Boil water/)).toBeNull();
+    fireEvent.click(screen.getByText('View recipe'));
+    expect(screen.getByText(/Boil water, add 53g powder/)).toBeInTheDocument();
   });
 });
 

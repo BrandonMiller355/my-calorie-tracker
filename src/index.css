@@ -482,6 +482,7 @@ body {
 
 .entry-form input,
 .entry-form select,
+.entry-form textarea,
 .goals-form input,
 .appearance-section select,
 .search-input {
@@ -492,6 +493,11 @@ body {
   padding: 8px 10px;
   font-size: 15px;
   font-weight: 400;
+}
+
+.entry-form textarea {
+  font-family: inherit;
+  resize: vertical;
 }
 
 .combobox {
@@ -740,6 +746,13 @@ label.flagged input {
 .result-macros {
   font-size: 13px;
   color: var(--muted);
+}
+
+.food-recipe {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: pre-wrap;
 }
 
 /* Barcode scanner */

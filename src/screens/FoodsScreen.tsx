@@ -21,6 +21,7 @@ function toFormValues(food?: LibraryFood): FoodFormValues {
   return {
     name: food?.name ?? '',
     description: food?.description ?? '',
+    recipe: food?.recipe ?? '',
     servingLabel: food?.servingLabel ?? '',
     servingSizeAmount: food?.servingSize ? String(food.servingSize.amount) : '',
     servingSizeUnit: food?.servingSize?.unit ?? '',
@@ -46,6 +47,9 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
   const [errors, setErrors] = useState<FoodFormErrors>({});
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Recipe text can be long, so it stays collapsed even when editing a food
+  // that already has one, rather than expanding the form by default.
+  const [recipeOpen, setRecipeOpen] = useState(false);
   // Only close on backdrop clicks that also started on the backdrop, so
   // dragging a text selection from a field past the dialog edge doesn't
   // dismiss the form on mouseup.
@@ -115,6 +119,22 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
             placeholder="Brand, prep, weights"
           />
         </label>
+
+        {recipeOpen ? (
+          <label>
+            Recipe (optional)
+            <textarea
+              value={values.recipe}
+              onChange={(e) => setField('recipe', e.target.value)}
+              placeholder="Prep steps — e.g. Boil water in the kettle. Add 53g powdered mash..."
+              rows={4}
+            />
+          </label>
+        ) : (
+          <button type="button" className="link-button" onClick={() => setRecipeOpen(true)}>
+            {values.recipe ? 'View recipe' : '+ Add recipe'}
+          </button>
+        )}
 
         <div className="serving-def">
           <div className="serving-def-row">
@@ -205,6 +225,16 @@ export function FoodsScreen() {
   const [form, setForm] = useState<FormMode>(null);
   const [archiveFailed, setArchiveFailed] = useState(false);
   const [query, setQuery] = useState('');
+  const [expandedRecipes, setExpandedRecipes] = useState<Set<string>>(new Set());
+
+  function toggleRecipe(id: string) {
+    setExpandedRecipes((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const visible =
     query.trim() === ''
@@ -267,6 +297,20 @@ export function FoodsScreen() {
                   {food.calories} kcal · F {food.fat} g · C {food.carbs} g · P {food.protein} g
                   {describeAnchor(food) ? ` · ${describeAnchor(food)}` : ''}
                 </span>
+                {food.recipe && (
+                  <>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => toggleRecipe(food.id)}
+                    >
+                      {expandedRecipes.has(food.id) ? 'Hide recipe' : 'View recipe'}
+                    </button>
+                    {expandedRecipes.has(food.id) && (
+                      <p className="food-recipe">{food.recipe}</p>
+                    )}
+                  </>
+                )}
               </div>
               <div className="food-row-actions">
                 <button type="button" onClick={() => setForm({ kind: 'edit', food })}>

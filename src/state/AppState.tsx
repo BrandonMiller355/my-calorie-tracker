@@ -129,10 +129,10 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 /**
- * addEntry input: `description` is not stored on the entry — it seeds the
- * library food when the entry is auto-captured as a new food.
+ * addEntry input: `description` and `recipe` are not stored on the entry —
+ * they seed the library food when the entry is auto-captured as a new food.
  */
-export type NewEntryInput = Omit<FoodEntry, 'id'> & { description?: string };
+export type NewEntryInput = Omit<FoodEntry, 'id'> & { description?: string; recipe?: string };
 
 export interface AppContextValue extends AppState {
   /** Effective goals for `date`: dayGoalOverride if set, else defaultGoals */
@@ -288,7 +288,7 @@ export function AppProvider({
 
   const addEntry = useCallback(
     async (input: NewEntryInput) => {
-      const { description, ...entryInput } = input;
+      const { description, recipe, ...entryInput } = input;
       // Auto-capture: link to the library food, capturing a new one when the
       // name is unknown. Existing foods are never updated from the log form,
       // and a capture failure must not block the entry save.
@@ -302,6 +302,7 @@ export function AppProvider({
             id: crypto.randomUUID(),
             name: entryInput.name,
             description: description?.trim() || undefined,
+            recipe: recipe?.trim() || undefined,
             servingLabel: entryInput.servingLabel,
             servingSize: entryInput.servingSize,
             calories: entryInput.calories,

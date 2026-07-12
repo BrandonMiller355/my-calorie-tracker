@@ -58,6 +58,8 @@ export interface LibraryFood extends ServingAnchor {
   name: string;
   /** Brand, prep notes, weights — shown as the secondary line in the picker */
   description?: string;
+  /** Free-text prep instructions, shown collapsed wherever the food appears */
+  recipe?: string;
   calories: number;
   carbs: number;
   protein: number;

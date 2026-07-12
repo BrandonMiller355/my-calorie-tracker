@@ -148,6 +148,10 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const [anchorErrors, setAnchorErrors] = useState<ServingAnchorFormErrors>({});
   /** Seeds the library food when this entry is captured as a new food */
   const [description, setDescription] = useState('');
+  const [recipe, setRecipe] = useState('');
+  const [recipeOpen, setRecipeOpen] = useState(false);
+  /** Collapsed disclosure for a matched food's existing recipe */
+  const [viewingRecipe, setViewingRecipe] = useState(false);
   const [suggestions, setSuggestions] = useState<MealSuggestions | null>(null);
   // Per-serving inputs are hidden for known foods until deliberately revealed
   // ("Edit nutrition"); search prefills missing nutrients start revealed so
@@ -314,6 +318,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   function selectFood(food: LibraryFood) {
     setFoodId(food.id);
     setDescription('');
+    setRecipe('');
+    setRecipeOpen(false);
+    setViewingRecipe(false);
     setNutritionOpen(false);
     setValues((v) => ({
       ...v,
@@ -376,6 +383,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   function applyEstimate(result: FoodSearchResult) {
     setFoodId(undefined);
     setDescription('');
+    setRecipe('');
+    setRecipeOpen(false);
+    setViewingRecipe(false);
     setAnchorFields(anchorToFields(result));
     setAiEstimatedWeight(false);
     setAiPrefilled(true);
@@ -439,6 +449,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           source: prefill || aiPrefilled ? 'search' : 'manual',
           foodId,
           description: description.trim() || undefined,
+          recipe: recipe.trim() || undefined,
         });
       }
       if (showLibraryAnchorEditor && matchedFood) {
@@ -529,17 +540,47 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           {matchedFood?.description && (
             <span className="combobox-selected-desc">{matchedFood.description}</span>
           )}
+          {matchedFood?.recipe && (
+            <>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => setViewingRecipe((v) => !v)}
+              >
+                {viewingRecipe ? 'Hide recipe' : 'View recipe'}
+              </button>
+              {viewingRecipe && <p className="food-recipe">{matchedFood.recipe}</p>}
+            </>
+          )}
         </div>
 
         {showAnchorEditor && (
-          <label>
-            Description (optional)
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brand, prep, weights — saved to your food library"
-            />
-          </label>
+          <>
+            <label>
+              Description (optional)
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brand, prep, weights — saved to your food library"
+              />
+            </label>
+
+            {recipeOpen ? (
+              <label>
+                Recipe (optional)
+                <textarea
+                  value={recipe}
+                  onChange={(e) => setRecipe(e.target.value)}
+                  placeholder="Prep steps — saved to your food library"
+                  rows={4}
+                />
+              </label>
+            ) : (
+              <button type="button" className="link-button" onClick={() => setRecipeOpen(true)}>
+                + Add recipe
+              </button>
+            )}
+          </>
         )}
 
         <label>
