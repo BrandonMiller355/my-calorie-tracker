@@ -4,7 +4,7 @@
 - [x] 1.2 Define the request contract (`text`, `meal`, `foods` payload reusing identify's shape) and validate it (reject blank text, missing/empty foods list handled per design — foods may legitimately be empty for a new user; all items then come back as estimates)
 - [x] 1.3 Write the system prompt: split the description into items; per item return `foodId` from the list OR `name` + per-portion nutrition + `confidenceNote`; optional `servings`/`grams`; `meal` only when the text states one; never force a match
 - [x] 1.4 Define the Gemini response schema (flat all-optional item fields) and server-side revalidation: classify each item as match (known `foodId`) or estimate (name + finite non-negative nutrition), drop unusable items, error when none survive
-- [ ] 1.5 Deploy the function and smoke-test with curl: multi-known-food text, mixed known/unknown, meal stated, gibberish
+- [x] 1.5 Deploy the function and smoke-test with curl: multi-known-food text, mixed known/unknown, meal stated, gibberish *(deployed by Brandon; curl verified unauthenticated 401 + CORS preflight 204; parse-quality checks need a signed-in session, folded into 6.1)*
 
 ## 2. Client API
 
@@ -33,5 +33,5 @@
 
 ## 6. Verify end-to-end
 
-- [ ] 6.1 Run the full flow in the app against the deployed function: multi-item dictated-style text logs correct entries under the right meals; single-item text lands in the form; totals update
+- [x] 6.1 Run the full flow in the app against the deployed function: multi-item dictated-style text logs correct entries under the right meals; single-item text lands in the form; totals update *(verified on-device by Brandon)*
 - [x] 6.2 Run the whole test suite and typecheck
