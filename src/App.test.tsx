@@ -668,7 +668,7 @@ describe('Search escalation round trip', () => {
     const lunch = await screen.findByRole('region', { name: 'Lunch' });
     fireEvent.click(within(lunch).getByText('+ Log food'));
     let form = screen.getByRole('form', { name: 'Log food entry' });
-    expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
+    expect(within(form).getByRole('radio', { name: 'Lunch' })).toBeChecked();
 
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'granola' } });
     fireEvent.click(await screen.findByRole('option', { name: /Search online for “granola”/ }));
@@ -679,7 +679,7 @@ describe('Search escalation round trip', () => {
 
     form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
-    expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
+    expect(within(form).getByRole('radio', { name: 'Lunch' })).toBeChecked();
   });
 
   it('standalone search still hands off with the default meal', async () => {
@@ -693,7 +693,7 @@ describe('Search escalation round trip', () => {
 
     const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
-    expect(within(form).getByLabelText('Meal')).toHaveValue('snacks');
+    expect(within(form).getByRole('radio', { name: 'Snacks' })).toBeChecked();
   });
 
   it('offers a retry after a failed search, which recovers without retyping', async () => {
@@ -756,7 +756,7 @@ describe('Barcode scanning', () => {
 
     const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Skyr');
-    expect(within(form).getByLabelText('Meal')).toHaveValue('lunch');
+    expect(within(form).getByRole('radio', { name: 'Lunch' })).toBeChecked();
     expect(getProductByBarcode).toHaveBeenCalledWith(SCANNED_CODE, expect.anything());
   });
 
@@ -818,7 +818,7 @@ describe('AI photo analysis', () => {
 
     const form = await screen.findByRole('form', { name: 'Log food entry' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Chicken and rice');
-    expect(within(form).getByLabelText('Meal')).toHaveValue('dinner');
+    expect(within(form).getByRole('radio', { name: 'Dinner' })).toBeChecked();
   });
 
   it('cancelling the overlay returns to the search screen with its state intact', async () => {

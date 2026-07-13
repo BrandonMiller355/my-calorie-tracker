@@ -6,6 +6,7 @@ import { EntryForm } from '../components/EntryForm';
 import { MealSection } from '../components/MealSection';
 import { Summary } from '../components/Summary';
 import { WeeklyDeficit } from '../components/WeeklyDeficit';
+import { currentMeal } from '../lib/mealTime';
 import { sumTotals } from '../lib/totals';
 import { useAppState } from '../state/AppState';
 import { MEALS, type FoodEntry, type FoodSearchResult, type Meal } from '../types';
@@ -43,6 +44,8 @@ export function DayLogScreen() {
   } = useAppState();
   const [form, setForm] = useState<FormMode>(null);
   const [deleteFailed, setDeleteFailed] = useState(false);
+  /** Session-lived expand/collapse choices; unset meals follow the time-of-day default */
+  const [mealOpenOverrides, setMealOpenOverrides] = useState<Partial<Record<Meal, boolean>>>({});
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -59,6 +62,7 @@ export function DayLogScreen() {
   }, [location.state, location.pathname, navigate]);
 
   const totals = sumTotals(entries);
+  const nowMeal = currentMeal();
 
   if (loadFailed) {
     return (
@@ -66,7 +70,7 @@ export function DayLogScreen() {
         <DateNav date={date} onChange={setDate} />
         <div className="load-error" role="alert">
           <p>Couldn’t reach the server, so your log can’t be loaded right now.</p>
-          <button type="button" onClick={retryLoad}>
+          <button type="button" className="button-secondary" onClick={retryLoad}>
             Retry
           </button>
         </div>
@@ -77,19 +81,25 @@ export function DayLogScreen() {
   return (
     <div className="day-log">
       <DateNav date={date} onChange={setDate} />
-      <Summary totals={totals} goals={goals} goalsAreDefault={goalsAreDefault} />
+      <Summary
+        totals={totals}
+        goals={goals}
+        goalsAreDefault={goalsAreDefault}
+        footer={
+          <DayGoalEditor
+            key={date}
+            date={date}
+            goals={goals}
+            dayGoalIsOverridden={dayGoalIsOverridden}
+            onSave={saveDayGoals}
+            onClear={clearDayGoals}
+          />
+        }
+      />
       <WeeklyDeficit
         deficit={weeklyDeficitToDate}
         goal={weeklyDeficitGoal}
         hasMissingDays={weeklyDeficitMissingDays}
-      />
-      <DayGoalEditor
-        key={date}
-        date={date}
-        goals={goals}
-        dayGoalIsOverridden={dayGoalIsOverridden}
-        onSave={saveDayGoals}
-        onClear={clearDayGoals}
       />
 
       {deleteFailed && (
@@ -99,13 +109,26 @@ export function DayLogScreen() {
       )}
 
       {entriesLoading ? (
-        <p className="loading">Loading…</p>
+        <div className="skeleton-list" role="status">
+          <span className="sr-only">Loading…</span>
+          {MEALS.map((meal) => (
+            <div key={meal} className="skeleton-bar" aria-hidden="true" />
+          ))}
+        </div>
       ) : (
         MEALS.map((meal) => (
           <MealSection
             key={meal}
             meal={meal}
             entries={entries.filter((e) => e.meal === meal)}
+            open={mealOpenOverrides[meal] ?? MEALS.indexOf(meal) >= MEALS.indexOf(nowMeal)}
+            onToggle={() =>
+              setMealOpenOverrides((prev) => ({
+                ...prev,
+                [meal]: !(prev[meal] ?? MEALS.indexOf(meal) >= MEALS.indexOf(nowMeal)),
+              }))
+            }
+            isNow={meal === nowMeal}
             onAdd={() => setForm({ kind: 'add', meal })}
             onEdit={(entry) => setForm({ kind: 'edit', entry })}
             onDelete={(id) => {
@@ -115,6 +138,10 @@ export function DayLogScreen() {
           />
         ))
       )}
+
+      <button type="button" className="fab" onClick={() => setForm({ kind: 'add', meal: nowMeal })}>
+        + Log
+      </button>
 
       {form && (
         <EntryForm

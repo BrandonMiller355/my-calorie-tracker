@@ -485,29 +485,30 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         onSubmit={handleSubmit}
         aria-label={editing ? 'Edit food entry' : 'Log food entry'}
       >
+        <div className="sheet-handle" aria-hidden="true" />
         <div className="entry-form-header">
           <h2>{editing ? 'Edit food' : 'Log food'}</h2>
           {!editing && (
-            <>
+            <div className="entry-form-header-chips">
               <button
                 type="button"
-                className="identify-button secondary"
+                className="ghost-chip"
                 onClick={() => setTextLogging(true)}
                 aria-label="Log foods from a text description"
                 title="Log foods from a text description"
               >
-                💬✨
+                ✦ Describe
               </button>
               <button
                 type="button"
-                className="identify-button secondary"
+                className="ghost-chip"
                 onClick={() => setIdentifying(true)}
                 aria-label="Identify food from a photo"
                 title="Identify food from a photo"
               >
-                📷✨
+                ✦ Photo
               </button>
-            </>
+            </div>
           )}
         </div>
 
@@ -583,16 +584,23 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           </>
         )}
 
-        <label>
-          Meal
-          <select value={meal} onChange={(e) => setMeal(e.target.value as Meal)}>
+        <fieldset className="segmented-field" aria-label="Meal">
+          <legend>Meal</legend>
+          <div className="segmented">
             {MEALS.map((m) => (
-              <option key={m} value={m}>
+              <label key={m} className={`segment${meal === m ? ' segment-active' : ''}`}>
+                <input
+                  type="radio"
+                  name={`${nameInputId}-meal`}
+                  value={m}
+                  checked={meal === m}
+                  onChange={() => setMeal(m)}
+                />
                 {MEAL_LABELS[m]}
-              </option>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </fieldset>
 
         {showAnchorEditor && (
           <ServingAnchorFields values={anchorFields} errors={anchorErrors} onChange={setAnchorField} />

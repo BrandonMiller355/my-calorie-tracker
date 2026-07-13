@@ -73,6 +73,7 @@ export function SettingsScreen() {
 
   return (
     <div className="settings-screen">
+      <section className="settings-card">
       <h1>Default daily goal</h1>
       <p className="form-note">
         This is the goal used on any day that doesn’t have its own custom goal. Adjust a single
@@ -97,11 +98,14 @@ export function SettingsScreen() {
           </label>
         ))}
         {error && <p className="field-error">{error}</p>}
-        <button type="submit">Save goals</button>
-        {saved && <span className="saved-note">Saved ✓</span>}
+        <div className="form-save-row">
+          <button type="submit">Save goals</button>
+          {saved && <span className="saved-note">Saved ✓</span>}
+        </div>
       </form>
+      </section>
 
-      <div className="weekly-deficit-section">
+      <section className="settings-card weekly-deficit-section">
         <h2>Weekly deficit goal</h2>
         <p className="form-note">
           Optional target for your running weekly calorie deficit (e.g. 3500 kcal). Leave it blank
@@ -118,33 +122,39 @@ export function SettingsScreen() {
             />
           </label>
           {weeklyDeficitError && <p className="field-error">{weeklyDeficitError}</p>}
-          <button type="submit">Save weekly goal</button>
-          {weeklyDeficitSaved && <span className="saved-note">Saved ✓</span>}
+          <div className="form-save-row">
+            <button type="submit">Save weekly goal</button>
+            {weeklyDeficitSaved && <span className="saved-note">Saved ✓</span>}
+          </div>
         </form>
-      </div>
+      </section>
 
-      <div className="appearance-section">
+      <section className="settings-card appearance-section">
         <h2>Appearance</h2>
-        <label>
-          Theme
-          <select
-            value={theme}
-            onChange={(e) => setTheme(e.target.value as ThemePreference)}
-          >
+        <fieldset className="segmented-field" aria-label="Theme">
+          <legend>Theme</legend>
+          <div className="segmented">
             {THEME_OPTIONS.map(({ value, label }) => (
-              <option key={value} value={value}>
+              <label key={value} className={`segment${theme === value ? ' segment-active' : ''}`}>
+                <input
+                  type="radio"
+                  name="theme"
+                  value={value}
+                  checked={theme === value}
+                  onChange={() => setTheme(value)}
+                />
                 {label}
-              </option>
+              </label>
             ))}
-          </select>
-        </label>
-      </div>
+          </div>
+        </fieldset>
+      </section>
 
-      <div className="signout-section">
-        <button type="button" className="secondary" onClick={() => void signOut()}>
+      <section className="settings-card signout-section">
+        <button type="button" className="signout-button" onClick={() => void signOut()}>
           Sign out
         </button>
-      </div>
+      </section>
     </div>
   );
 }

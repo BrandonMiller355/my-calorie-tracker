@@ -124,33 +124,57 @@ export function SearchScreen() {
     <div className="search-screen">
       <h1>Search foods</h1>
       <div className="search-actions">
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Search Open Food Facts, e.g. “greek yogurt”"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            if (scan.kind !== 'idle') setScan({ kind: 'idle' });
-          }}
-          autoFocus
-        />
-        {canScan && (
-          <button
-            type="button"
-            className="scan-button"
-            onClick={() => setScan({ kind: 'scanning' })}
+        <div className="search-input-wrap">
+          <svg
+            className="search-input-icon"
+            aria-hidden="true"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
           >
-            📷 Scan a barcode
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            className="search-input"
+            type="search"
+            placeholder="Search Open Food Facts, e.g. “greek yogurt”"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (scan.kind !== 'idle') setScan({ kind: 'idle' });
+            }}
+            autoFocus
+          />
+          {query !== '' && (
+            <button
+              type="button"
+              className="search-clear"
+              aria-label="Clear search"
+              onClick={() => setQuery('')}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <div className="search-chips">
+          {canScan && (
+            <button
+              type="button"
+              className="ghost-chip"
+              onClick={() => setScan({ kind: 'scanning' })}
+            >
+              Scan a barcode
+            </button>
+          )}
+          <button type="button" className="ghost-chip" onClick={() => setAnalyzing(true)}>
+            ✦ AI analyze a photo
           </button>
-        )}
-        <button
-          type="button"
-          className="scan-button"
-          onClick={() => setAnalyzing(true)}
-        >
-          ✨ AI analyze a photo
-        </button>
+        </div>
       </div>
 
       {analyzing && (
@@ -241,26 +265,38 @@ export function SearchScreen() {
 
       {state.kind === 'done' && state.results.length > 0 && (
         <>
+          <p className="results-meta">
+            Open Food Facts · {state.results.length}{' '}
+            {state.results.length === 1 ? 'result' : 'results'}
+          </p>
           <ul className="result-list">
-            {state.results.map((r) => (
-              <li key={r.id}>
-                <button className="result-row" onClick={() => select(r)}>
-                  <span className="result-name">
-                    {r.name}
-                    {r.brand && <span className="result-brand"> · {r.brand}</span>}
-                  </span>
-                  <span className="result-serving">
-                    {r.servingSize
-                      ? `1 ${r.servingLabel} = ${r.servingSize.amount} ${unitLabel(r.servingSize.unit)}`
-                      : `1 ${r.servingLabel}`}
-                  </span>
-                  <span className="result-macros">
-                    {fmt(r.calories, 'kcal')} · F {fmt(r.fat, 'g')} · C {fmt(r.carbs, 'g')} · P{' '}
-                    {fmt(r.protein, 'g')}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {state.results.map((r) => {
+              const incomplete =
+                r.calories === undefined ||
+                r.fat === undefined ||
+                r.carbs === undefined ||
+                r.protein === undefined;
+              return (
+                <li key={r.id}>
+                  <button className="result-row" onClick={() => select(r)}>
+                    <span className="result-main">
+                      <span className="result-name">
+                        {r.name}
+                        {r.brand && <span className="result-brand"> · {r.brand}</span>}
+                      </span>
+                      <span className="result-serving">
+                        {r.servingSize
+                          ? `1 ${r.servingLabel} = ${r.servingSize.amount} ${unitLabel(r.servingSize.unit)}`
+                          : `1 ${r.servingLabel}`}
+                        {' · '}F {fmt(r.fat, 'g')} · C {fmt(r.carbs, 'g')} · P {fmt(r.protein, 'g')}
+                        {incomplete && <span className="result-incomplete"> · incomplete</span>}
+                      </span>
+                    </span>
+                    <span className="result-kcal">{fmt(r.calories, 'kcal')}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
           <p className="search-hint">
             Not what you’re looking for?{' '}

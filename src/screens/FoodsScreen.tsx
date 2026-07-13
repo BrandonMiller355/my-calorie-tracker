@@ -103,6 +103,7 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
         onSubmit={handleSubmit}
         aria-label={editing ? 'Edit library food' : 'Add library food'}
       >
+        <div className="sheet-handle" aria-hidden="true" />
         <h2>{editing ? 'Edit food' : 'Add food item'}</h2>
 
         <label>

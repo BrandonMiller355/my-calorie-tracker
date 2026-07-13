@@ -161,6 +161,23 @@ export function FoodNameCombobox({
         onKeyDown={handleKeyDown}
         autoFocus={autoFocus}
       />
+      {value !== '' && (
+        <button
+          type="button"
+          className="combobox-clear"
+          aria-label="Clear name"
+          // preventDefault keeps focus on the input so blur doesn't swallow the click
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            onChange('');
+            setOpen(true);
+            setActiveIndex(-1);
+            inputRef.current?.focus();
+          }}
+        >
+          ✕
+        </button>
+      )}
       {expanded && (
         <ul className="combobox-list" id={listId} role="listbox">
           {groups

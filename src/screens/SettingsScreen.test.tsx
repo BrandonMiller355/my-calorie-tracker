@@ -74,14 +74,14 @@ describe('SettingsScreen theme toggle', () => {
   it('defaults to "Match device" and applies no override', async () => {
     renderSettings();
     await screen.findByRole('heading', { name: 'Default daily goal' });
-    expect(screen.getByLabelText('Theme')).toHaveValue('system');
+    expect(screen.getByRole('radio', { name: 'Match device' })).toBeChecked();
     expect(document.documentElement).not.toHaveAttribute('data-theme');
   });
 
   it('switches the app to dark mode and persists the choice', async () => {
     renderSettings();
     await screen.findByRole('heading', { name: 'Default daily goal' });
-    fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'dark' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
 
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(localStorage.getItem('cal-tracker:theme')).toBe('dark');

@@ -371,7 +371,7 @@ describe('EntryForm text-log action', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('Chicken breast');
     expect(screen.getByLabelText('Amount')).toHaveValue('150');
     expect(screen.getByLabelText('Unit')).toHaveValue('g');
-    expect(screen.getByLabelText('Meal')).toHaveValue('dinner');
+    expect(screen.getByRole('radio', { name: 'Dinner' })).toBeChecked();
     // 1.5 servings of 165 kcal
     expect(screen.getByTestId('entry-preview')).toHaveTextContent('247.5 kcal');
   });
@@ -401,7 +401,7 @@ describe('EntryForm text-log action', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('Peanut butter toast');
     expect(screen.getByLabelText('Amount')).toHaveValue('1');
     expect(screen.getByLabelText('Unit')).toHaveValue('serving');
-    expect(screen.getByLabelText('Meal')).toHaveValue('breakfast');
+    expect(screen.getByRole('radio', { name: 'Breakfast' })).toBeChecked();
     // A new food's nutrition inputs are visible, seeded from the estimate
     expect(screen.getByLabelText(/Calories/)).toHaveValue('250');
   });
