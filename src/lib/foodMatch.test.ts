@@ -64,4 +64,19 @@ describe('matchFoods', () => {
     const many = Array.from({ length: 10 }, (_, i) => food(String(i), `Apple ${i}`));
     expect(matchFoods(many, 'apple')).toHaveLength(10);
   });
+
+  it('matches out-of-order, comma-separated name words', () => {
+    const cheddar = food('c', 'Cheese, Cheddar, Fat Free, Shred', 'Kraft Natural Cheese');
+    expect(matchFoods([...library, cheddar], 'fat free cheese').map((f) => f.id)).toEqual(['c']);
+  });
+
+  it('ranks a name match above a description-only match', () => {
+    const nameMatch = food('n', 'Kraft cheese slices');
+    const descMatch = food('d', 'Cheddar block', 'Kraft brand');
+    expect(matchFoods([descMatch, nameMatch], 'kraft').map((f) => f.id)).toEqual(['n', 'd']);
+  });
+
+  it('requires every token to match, missing one excludes the food', () => {
+    expect(matchFoods(library, 'grilled tofu')).toEqual([]);
+  });
 });
