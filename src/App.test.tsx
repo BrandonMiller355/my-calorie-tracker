@@ -247,7 +247,7 @@ describe('App (spec scenario walkthrough)', () => {
     fireEvent.click(screen.getByText('Save for today'));
 
     expect(await screen.findByText('1500 kcal left')).toBeInTheDocument();
-    expect(screen.getByText(/Using a custom goal for today/)).toBeInTheDocument();
+    expect(screen.getByText(/Custom goal for today/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Use default'));
     expect(await screen.findByText('2000 kcal left')).toBeInTheDocument();

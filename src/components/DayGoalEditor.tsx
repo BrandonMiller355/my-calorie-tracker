@@ -66,17 +66,39 @@ export function DayGoalEditor({
     return (
       <div className="day-goal-editor">
         {dayGoalIsOverridden ? (
-          <p className="day-goal-note">
-            Using a custom goal for {label}.{' '}
-            <button type="button" className="link-button" onClick={startEditing}>
-              Edit
-            </button>{' '}
-            <button type="button" className="link-button" onClick={handleClear} disabled={busy}>
-              Use default
-            </button>
-          </p>
+          <div className="day-goal-note">
+            <span className="day-goal-note-text">Custom goal for {label}</span>
+            <span className="day-goal-actions">
+              <button
+                type="button"
+                className="day-goal-chip"
+                onClick={startEditing}
+                title="Edit this day’s goal"
+              >
+                <span className="day-goal-chip-icon" aria-hidden="true">
+                  ✎
+                </span>
+                Edit
+              </button>
+              <button
+                type="button"
+                className="day-goal-chip"
+                onClick={handleClear}
+                disabled={busy}
+                title="Reset to your default goal"
+              >
+                <span className="day-goal-chip-icon" aria-hidden="true">
+                  ↺
+                </span>
+                Use default
+              </button>
+            </span>
+          </div>
         ) : (
-          <button type="button" className="link-button" onClick={startEditing}>
+          <button type="button" className="day-goal-chip day-goal-chip-add" onClick={startEditing}>
+            <span className="day-goal-chip-icon" aria-hidden="true">
+              +
+            </span>
             Set a custom goal for {label}
           </button>
         )}
