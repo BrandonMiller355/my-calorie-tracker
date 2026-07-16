@@ -908,8 +908,11 @@ describe('Food library screen', () => {
     fireEvent.click(within(snacks).getByText('+ Log food'));
     const form = screen.getByRole('form', { name: 'Log food entry' });
     fireEvent.focus(within(form).getByLabelText('Name'));
-    // suggestions resolve within a waitFor poll; the archived food never shows
-    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    // suggestions resolve within a waitFor poll; the archived food never
+    // shows — only the fixed "log calories only" action remains
+    await waitFor(() =>
+      expect(screen.getByRole('listbox')).toHaveTextContent('Log calories only'),
+    );
     expect(screen.queryByRole('option', { name: /Chips/ })).toBeNull();
   });
 

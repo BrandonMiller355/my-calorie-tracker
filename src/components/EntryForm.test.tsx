@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { EntryForm } from './EntryForm';
 import { AppProvider } from '../state/AppState';
@@ -150,6 +150,7 @@ const ENTRY: FoodEntry = {
 
 class FakeRepository implements StorageRepository {
   addEntryCalls: unknown[] = [];
+  updateEntryCalls: unknown[] = [];
   updateFoodCalls: unknown[] = [];
   addFoodCalls: unknown[] = [];
 
@@ -159,7 +160,9 @@ class FakeRepository implements StorageRepository {
   async addEntry(entry: unknown): Promise<void> {
     this.addEntryCalls.push(entry);
   }
-  async updateEntry(): Promise<void> {}
+  async updateEntry(entry: unknown): Promise<void> {
+    this.updateEntryCalls.push(entry);
+  }
   async deleteEntry(): Promise<void> {}
   async getDefaultGoals(): Promise<Goals | null> {
     return null;
@@ -192,8 +195,10 @@ class FakeRepository implements StorageRepository {
   async saveWeeklyDeficitGoal(): Promise<void> {}
 }
 
-async function renderForm(props: { editing?: FoodEntry; onClose?: () => void } = {}) {
-  const repository = new FakeRepository();
+async function renderForm(
+  props: { editing?: FoodEntry; onClose?: () => void; repository?: FakeRepository } = {},
+) {
+  const repository = props.repository ?? new FakeRepository();
   render(
     <MemoryRouter>
       <AuthProvider>
@@ -425,5 +430,177 @@ describe('EntryForm text-log action', () => {
 
     expect(screen.queryByTestId('text-log-overlay')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toHaveValue('half-typed');
+  });
+});
+
+const QUICK_ENTRY: FoodEntry = {
+  id: 'entry-quick-1',
+  date: '2026-07-09',
+  meal: 'snacks',
+  name: 'Calories',
+  amount: 1,
+  unit: 'serving',
+  servingLabel: 'serving',
+  quantity: 1,
+  calories: 450,
+  carbs: 0,
+  protein: 0,
+  fat: 0,
+  source: 'quick',
+  description: 'wedding buffet',
+};
+
+function enterQuickMode() {
+  fireEvent.focus(screen.getByLabelText('Name'));
+  fireEvent.click(screen.getByText('Log calories only'));
+}
+
+describe('EntryForm quick calories mode', () => {
+  it('offers the quick action last, with the name field empty and while typing', async () => {
+    await renderForm();
+
+    fireEvent.focus(screen.getByLabelText('Name'));
+    let options = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(options[options.length - 1]).toHaveTextContent('Log calories only');
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'chick' } });
+    options = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toContain('Search online for “chick”');
+    expect(options[options.length - 1]).toHaveTextContent('Log calories only');
+  });
+
+  it('does not offer the quick action when editing a normal entry', async () => {
+    await renderForm({ editing: ENTRY });
+    fireEvent.focus(screen.getByLabelText('Name'));
+    expect(screen.queryByText('Log calories only')).not.toBeInTheDocument();
+  });
+
+  it('switches to the quick form: fixed name, no amount/serving, nutrition and description inputs', async () => {
+    await renderForm();
+    enterQuickMode();
+
+    expect(screen.getByRole('heading', { name: 'Log calories' })).toBeInTheDocument();
+    expect(screen.getByText('Calories')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+    expect(screen.queryByText('Serving name')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Calories \(kcal\)/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Protein \(g\)/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Description \(optional\)/)).toBeInTheDocument();
+  });
+
+  it('saves a quick entry with fixed fields, entered macros, and the description on the entry', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+    enterQuickMode();
+
+    fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '400' } });
+    fireEvent.change(screen.getByLabelText(/Carbs \(g\)/), { target: { value: '40' } });
+    fireEvent.change(screen.getByLabelText(/Protein \(g\)/), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText(/Fat \(g\)/), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText(/Description \(optional\)/), {
+      target: { value: 'wedding buffet' },
+    });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addEntryCalls).toHaveLength(1);
+    expect(repository.addEntryCalls[0]).toMatchObject({
+      name: 'Calories',
+      amount: 1,
+      unit: 'serving',
+      servingLabel: 'serving',
+      quantity: 1,
+      calories: 400,
+      carbs: 40,
+      protein: 30,
+      fat: 10,
+      source: 'quick',
+      description: 'wedding buffet',
+      foodId: undefined,
+    });
+    expect(repository.addFoodCalls).toHaveLength(0);
+  });
+
+  it('saves blank macros as 0 and no description as undefined', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+    enterQuickMode();
+
+    fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '450' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addEntryCalls[0]).toMatchObject({
+      calories: 450,
+      carbs: 0,
+      protein: 0,
+      fat: 0,
+      description: undefined,
+    });
+  });
+
+  it('never captures or links a library food, even when one named "Calories" exists', async () => {
+    const repository = new FakeRepository();
+    repository.getFoods = async () => [
+      ...(await new FakeRepository().getFoods()),
+      { ...CHICKEN, id: 'food-calories', name: 'Calories', calories: 100 },
+    ];
+    const onClose = vi.fn();
+    await renderForm({ onClose, repository });
+    enterQuickMode();
+
+    fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '300' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addEntryCalls[0]).toMatchObject({ foodId: undefined, source: 'quick' });
+    expect(repository.addFoodCalls).toHaveLength(0);
+    expect(repository.updateFoodCalls).toHaveLength(0);
+  });
+
+  it('rejects an empty or invalid calorie value and invalid macros', async () => {
+    const repository = await renderForm();
+    enterQuickMode();
+
+    fireEvent.click(screen.getByText('Add to log'));
+    expect(screen.getByText('Enter a number of 0 or more')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '300' } });
+    fireEvent.change(screen.getByLabelText(/Protein \(g\)/), { target: { value: '-5' } });
+    fireEvent.click(screen.getByText('Add to log'));
+    expect(screen.getByText('Enter a number of 0 or more')).toBeInTheDocument();
+
+    expect(repository.addEntryCalls).toHaveLength(0);
+  });
+
+  it('editing a quick entry reopens the quick form prefilled and saves entry-only', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ editing: QUICK_ENTRY, onClose });
+
+    expect(screen.getByRole('heading', { name: 'Edit calories' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Calories \(kcal\)/)).toHaveValue('450');
+    expect(screen.getByLabelText(/Description \(optional\)/)).toHaveValue('wedding buffet');
+
+    fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText(/Description \(optional\)/), {
+      target: { value: 'buffet, second plate' },
+    });
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.updateEntryCalls).toHaveLength(1);
+    expect(repository.updateEntryCalls[0]).toMatchObject({
+      id: QUICK_ENTRY.id,
+      name: 'Calories',
+      calories: 500,
+      source: 'quick',
+      description: 'buffet, second plate',
+      foodId: undefined,
+    });
+    expect(repository.addFoodCalls).toHaveLength(0);
+    expect(repository.updateFoodCalls).toHaveLength(0);
   });
 });

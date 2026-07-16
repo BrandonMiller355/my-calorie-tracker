@@ -47,9 +47,12 @@ export interface FoodEntry extends ServingAnchor {
   carbs: number;
   protein: number;
   fat: number;
-  source: 'manual' | 'search';
+  /** 'quick' entries are calories-only estimates that never touch the library */
+  source: 'manual' | 'search' | 'quick';
   /** Library food this entry came from; nutrition and anchor are still snapshots */
   foodId?: string;
+  /** Free-text context for quick entries; stored on the entry, not a library food */
+  description?: string;
 }
 
 /** A saved food in the user's personal library; nutrition is per serving. */

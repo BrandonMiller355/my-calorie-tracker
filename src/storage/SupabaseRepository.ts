@@ -52,6 +52,7 @@ interface FoodEntryRow extends AnchorColumns {
   fat: number;
   source: FoodEntry['source'];
   food_id: string | null;
+  description: string | null;
 }
 
 function toRow(entry: FoodEntry): FoodEntryRow {
@@ -70,6 +71,7 @@ function toRow(entry: FoodEntry): FoodEntryRow {
     fat: entry.fat,
     source: entry.source,
     food_id: entry.foodId ?? null,
+    description: entry.description ?? null,
   };
 }
 
@@ -89,6 +91,7 @@ function fromRow(row: FoodEntryRow): FoodEntry {
     fat: row.fat,
     source: row.source,
     foodId: row.food_id ?? undefined,
+    description: row.description ?? undefined,
   };
 }
 

@@ -131,6 +131,8 @@ function reducer(state: AppState, action: Action): AppState {
 /**
  * addEntry input: `description` and `recipe` are not stored on the entry —
  * they seed the library food when the entry is auto-captured as a new food.
+ * Exception: quick entries (source 'quick') skip capture entirely and keep
+ * their description on the entry itself.
  */
 export type NewEntryInput = Omit<FoodEntry, 'id'> & { description?: string; recipe?: string };
 
@@ -289,6 +291,19 @@ export function AppProvider({
   const addEntry = useCallback(
     async (input: NewEntryInput) => {
       const { description, recipe, ...entryInput } = input;
+      // Quick calories-only entries never create, match, or link a library
+      // food — even if one named "Calories" exists.
+      if (entryInput.source === 'quick') {
+        const entry: FoodEntry = {
+          ...entryInput,
+          description: description?.trim() || undefined,
+          foodId: undefined,
+          id: crypto.randomUUID(),
+        };
+        await repository.addEntry(entry);
+        dispatch({ type: 'entry-added', entry });
+        return;
+      }
       // Auto-capture: link to the library food, capturing a new one when the
       // name is unknown. Existing foods are never updated from the log form,
       // and a capture failure must not block the entry save.

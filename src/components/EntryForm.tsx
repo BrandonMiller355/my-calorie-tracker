@@ -127,6 +127,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const amountInputId = useId();
 
   const [meal, setMeal] = useState<Meal>(editing?.meal ?? defaultMeal ?? 'snacks');
+  /** Calories-only quick entry: no name/amount/serving, never touches the library */
+  const [quick, setQuick] = useState(editing?.source === 'quick');
   const [values, setValues] = useState<EntryFormValues>({
     name: editing?.name ?? prefill?.name ?? '',
     amount: editing ? String(editing.amount) : '1',
@@ -146,8 +148,10 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     anchorToFields(prefill),
   );
   const [anchorErrors, setAnchorErrors] = useState<ServingAnchorFormErrors>({});
-  /** Seeds the library food when this entry is captured as a new food */
-  const [description, setDescription] = useState('');
+  /** Seeds the captured library food; for quick entries it stays on the entry */
+  const [description, setDescription] = useState(
+    editing?.source === 'quick' ? (editing.description ?? '') : '',
+  );
   const [recipe, setRecipe] = useState('');
   const [recipeOpen, setRecipeOpen] = useState(false);
   /** Collapsed disclosure for a matched food's existing recipe */
@@ -220,7 +224,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   // The serving definition is editable only for a food the library doesn't
   // know yet; edited entries use their own snapshot, matched foods their own
   // definition.
-  const showAnchorEditor = !editing && !matchedFood;
+  const showAnchorEditor = !quick && !editing && !matchedFood;
   // Revealing nutrition for a food linked to the library also reveals its
   // anchor fields; saving pushes both back to that library food.
   const showLibraryAnchorEditor = nutritionOpen && !!matchedFood;
@@ -297,23 +301,43 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     groups = [{ label: 'My foods', foods: matchFoods(foods, query) }];
   }
 
-  const actions: ComboboxAction[] =
-    saving || query === ''
-      ? []
-      : [
-          {
-            id: 'search-online',
-            label: `Search online for “${query}”`,
-            onSelect: () =>
-              navigate('/search', { state: { fromForm: { meal, date, query } } }),
-          },
-          {
-            id: 'use-as-new',
-            // Closing the dropdown is all this needs: free text already is the manual path
-            label: `Use “${query}” as a new food`,
-            onSelect: () => {},
-          },
-        ];
+  const actions: ComboboxAction[] = saving
+    ? []
+    : [
+        ...(query === ''
+          ? []
+          : [
+              {
+                id: 'search-online',
+                label: `Search online for “${query}”`,
+                onSelect: () =>
+                  navigate('/search', { state: { fromForm: { meal, date, query } } }),
+              },
+              {
+                id: 'use-as-new',
+                // Closing the dropdown is all this needs: free text already is the manual path
+                label: `Use “${query}” as a new food`,
+                onSelect: () => {},
+              },
+            ]),
+        // Always last, in both the empty-field and typing states
+        ...(editing
+          ? []
+          : [
+              {
+                id: 'quick-calories',
+                label: 'Log calories only',
+                onSelect: () => {
+                  setQuick(true);
+                  setFoodId(undefined);
+                  setDescription('');
+                  setRecipe('');
+                  setRecipeOpen(false);
+                  setViewingRecipe(false);
+                },
+              },
+            ]),
+      ];
 
   function selectFood(food: LibraryFood) {
     setFoodId(food.id);
@@ -402,8 +426,62 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     setEstimateHandoff(null);
   }
 
+  /** Returns false when the user backs out of a macro/calorie mismatch. */
+  function confirmMacroMismatch(parsed: {
+    calories: number;
+    carbs: number;
+    protein: number;
+    fat: number;
+  }): boolean {
+    const mismatch = checkMacroCalories(parsed.calories, parsed.carbs, parsed.protein, parsed.fat);
+    return (
+      !mismatch ||
+      window.confirm(
+        `The carbs, protein, and fat add up to about ${mismatch.expected} kcal, but you entered ` +
+          `${mismatch.entered} kcal. Save anyway?`,
+      )
+    );
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+
+    if (quick) {
+      // Name, amount, and serving are fixed; only nutrition and description
+      // come from the form. Never creates, matches, or links a library food.
+      const anchor: ServingAnchor = { servingLabel: DEFAULT_SERVING_LABEL };
+      const result = validateEntryForm(
+        { ...values, name: 'Calories', amount: '1', unit: DEFAULT_SERVING_LABEL },
+        anchor,
+      );
+      if (!result.ok) {
+        setErrors(result.errors);
+        return;
+      }
+      if (!confirmMacroMismatch(result.parsed)) return;
+      setErrors({});
+      setSaving(true);
+      setSaveFailed(false);
+      const quickFields = {
+        ...result.parsed,
+        ...anchor,
+        quantity: 1,
+        meal,
+        source: 'quick' as const,
+        foodId: undefined,
+        description: description.trim() || undefined,
+      };
+      try {
+        if (editing) await updateEntry({ ...editing, ...quickFields });
+        else await addEntry({ ...quickFields, date });
+        onClose();
+      } catch {
+        setSaveFailed(true);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
 
     const anchorResult = anchorFieldsActive ? validateServingAnchor(anchorFields) : null;
     const anchor: ServingAnchor | null =
@@ -415,21 +493,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
       return;
     }
 
-    const mismatch = checkMacroCalories(
-      result.parsed.calories,
-      result.parsed.carbs,
-      result.parsed.protein,
-      result.parsed.fat,
-    );
-    if (
-      mismatch &&
-      !window.confirm(
-        `The carbs, protein, and fat add up to about ${mismatch.expected} kcal, but you entered ` +
-          `${mismatch.entered} kcal. Save anyway?`,
-      )
-    ) {
-      return;
-    }
+    if (!confirmMacroMismatch(result.parsed)) return;
 
     setErrors({});
     setAnchorErrors({});
@@ -487,8 +551,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
       >
         <div className="sheet-handle" aria-hidden="true" />
         <div className="entry-form-header">
-          <h2>{editing ? 'Edit food' : 'Log food'}</h2>
-          {!editing && (
+          <h2>{quick ? (editing ? 'Edit calories' : 'Log calories') : editing ? 'Edit food' : 'Log food'}</h2>
+          {!editing && !quick && (
             <div className="entry-form-header-chips">
               <button
                 type="button"
@@ -512,15 +576,21 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           )}
         </div>
 
-        {missingFromSearch.size > 0 && (
+        {missingFromSearch.size > 0 && !quick && (
           <p className="form-note" role="alert">
             Some nutrition values were missing from the search result. They’ll be saved as 0
             unless you fill in the highlighted fields.
           </p>
         )}
 
-        {/* label references the input by id: the popup listbox must not sit
-            inside the <label>, or its options become part of the field's name */}
+        {quick ? (
+          <div className="field">
+            <span className="field-label">Name</span>
+            <p className="quick-entry-name">Calories</p>
+          </div>
+        ) : (
+        /* label references the input by id: the popup listbox must not sit
+            inside the <label>, or its options become part of the field's name */
         <div className="field">
           <label htmlFor={nameInputId}>Name</label>
           <FoodNameCombobox
@@ -554,6 +624,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             </>
           )}
         </div>
+        )}
 
         {showAnchorEditor && (
           <>
@@ -606,6 +677,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           <ServingAnchorFields values={anchorFields} errors={anchorErrors} onChange={setAnchorField} />
         )}
 
+        {!quick && (
         <div className="field">
           <label htmlFor={amountInputId}>Amount</label>
           <div className="amount-unit">
@@ -634,8 +706,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             <p className="form-note">Weight estimated by AI from the photo — check it.</p>
           )}
         </div>
+        )}
 
-        {(preview || !nutritionOpen) && (
+        {!quick && (preview || !nutritionOpen) && (
           <div className="entry-nutrition-summary">
             {preview && (
               <p className="entry-computed" data-testid="entry-preview">
@@ -668,7 +741,47 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           </div>
         )}
 
-        {nutritionOpen && (
+        {quick && (
+          <>
+            <label>
+              {CALORIE_FIELD.label}
+              <input
+                inputMode="decimal"
+                value={values[CALORIE_FIELD.key]}
+                onChange={(e) => setField(CALORIE_FIELD.key, e.target.value)}
+                autoFocus={!editing}
+              />
+              {errors[CALORIE_FIELD.key] && (
+                <span className="field-error">{errors[CALORIE_FIELD.key]}</span>
+              )}
+            </label>
+
+            <div className="nutrient-grid">
+              {NUTRIENT_FIELDS.map(({ key, label }) => (
+                <label key={key}>
+                  {label}
+                  <input
+                    inputMode="decimal"
+                    value={values[key]}
+                    onChange={(e) => setField(key, e.target.value)}
+                  />
+                  {errors[key] && <span className="field-error">{errors[key]}</span>}
+                </label>
+              ))}
+            </div>
+
+            <label>
+              Description (optional)
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What was it — e.g. wedding buffet"
+              />
+            </label>
+          </>
+        )}
+
+        {!quick && nutritionOpen && (
           <>
             {showLibraryAnchorEditor && (
               <ServingAnchorFields

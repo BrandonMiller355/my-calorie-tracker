@@ -63,11 +63,15 @@ export function MealSection({
                   <button className="entry-main" onClick={() => onEdit(entry)}>
                     <span className="entry-name">{entry.name}</span>
                     <span className="entry-caption">
-                      {showQty && (
-                        <span className="entry-qty">
-                          {entry.amount} {unitLabel(entry.unit)} ·{' '}
-                        </span>
-                      )}
+                      {entry.source === 'quick'
+                        ? entry.description && (
+                            <span className="entry-qty">{entry.description} · </span>
+                          )
+                        : showQty && (
+                            <span className="entry-qty">
+                              {entry.amount} {unitLabel(entry.unit)} ·{' '}
+                            </span>
+                          )}
                       F {t.fat} · C {t.carbs} · P {t.protein}
                     </span>
                   </button>

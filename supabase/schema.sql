@@ -141,7 +141,9 @@ create policy "own foods delete" on foods
   for delete using (user_id = auth.uid());
 
 -- Free-text prep instructions, e.g. "Boil water... 53g powder... 7g salt...".
--- Never snapshotted onto food_entries, same as description.
+-- Never snapshotted onto food_entries. (Description is likewise never
+-- snapshotted from a food; the later food_entries.description column is
+-- written only by quick calories-only entries.)
 alter table foods add column recipe text;
 
 -- Name-field suggestions: up to 3 foods most recently logged for the meal,
@@ -238,3 +240,12 @@ as $$
   left join goals g on true
   order by d.date;
 $$;
+
+-- Quick calories-only entries (source 'quick'): logged without naming a food
+-- and never captured, matched, or linked to the library. Unlike normal
+-- entries, their free-text description is stored on the entry itself.
+-- Run in the dashboard BEFORE deploying app code that saves quick entries.
+alter table food_entries add column description text;
+alter table food_entries drop constraint food_entries_source_check;
+alter table food_entries add constraint food_entries_source_check
+  check (source in ('manual', 'search', 'quick'));

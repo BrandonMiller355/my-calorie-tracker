@@ -77,6 +77,7 @@ const entryRow = {
   fat: 5,
   source: 'search',
   food_id: null,
+  description: null,
 };
 
 const food: LibraryFood = {
@@ -140,6 +141,23 @@ describe('SupabaseRepository', () => {
         { ...entryRow, unit: 'serving', serving_size_amount: null, serving_size_unit: null },
       ],
     });
+  });
+
+  it('round-trips a quick entry description on the entry row', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).addEntry({
+      ...entry,
+      source: 'quick',
+      description: 'wedding buffet',
+    });
+    expect(calls[1].args[0]).toMatchObject({ source: 'quick', description: 'wedding buffet' });
+
+    const { client: readClient } = fakeClient({
+      data: [{ ...entryRow, source: 'quick', description: 'wedding buffet' }],
+    });
+    const [mapped] = await new SupabaseRepository(readClient).getEntriesByDate('2026-07-05');
+    expect(mapped.description).toBe('wedding buffet');
+    expect(mapped.source).toBe('quick');
   });
 
   it('updateEntry updates by id without repeating id in the payload', async () => {

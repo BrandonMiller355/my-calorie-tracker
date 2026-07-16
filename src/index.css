@@ -1025,6 +1025,7 @@ a:hover {
 }
 
 .entry-form label,
+.entry-form .field-label,
 .goals-form label,
 .segmented-field legend {
   display: flex;
@@ -1033,6 +1034,13 @@ a:hover {
   font: 700 11px/1.3 var(--font);
   letter-spacing: 0.02em;
   color: var(--ink-soft);
+}
+
+/* Quick calories-only mode: the fixed entry name shown in place of the combobox */
+.entry-form .quick-entry-name {
+  margin: 0;
+  font: 600 15px/1.3 var(--font);
+  color: var(--ink);
 }
 
 .entry-form input,
