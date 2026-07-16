@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { findFoodByName, matchFoods } from '../lib/foodMatch';
+import { findFoodByName, matchFoods, normalizeFoodName } from '../lib/foodMatch';
 import { MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
   validateFoodForm,
@@ -10,6 +10,9 @@ import { useAppState } from '../state/AppState';
 import { DEFAULT_SERVING_LABEL, type LibraryFood } from '../types';
 
 type FormMode = { kind: 'create' } | { kind: 'edit'; food: LibraryFood } | null;
+
+/** Which save the user asked for, rather than which one the form was opened in. */
+type SaveMode = 'update' | 'create';
 
 const NUTRIENT_FIELDS = [
   { key: 'fat', label: 'Fat (g)' },
@@ -59,15 +62,22 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
     setValues((v) => ({ ...v, [key]: value }));
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  // Compared on the library's dedup key, so a case or whitespace tweak doesn't
+  // offer a fork that validation would then reject as a duplicate.
+  const nameDiverged =
+    editing !== undefined && normalizeFoodName(values.name) !== normalizeFoodName(editing.name);
+
+  async function save(mode: SaveMode) {
     const result = validateFoodForm(values);
     if (!result.ok) {
       setErrors(result.errors);
       return;
     }
+    // A fork is checked against the whole library, the food it started from
+    // included — only an in-place save gets to keep its own name.
+    const exemptId = mode === 'update' ? editing?.id : undefined;
     const duplicate = findFoodByName(foods, result.parsed.name);
-    if (duplicate && duplicate.id !== editing?.id) {
+    if (duplicate && duplicate.id !== exemptId) {
       setErrors({ name: 'A food with this name is already in your library' });
       return;
     }
@@ -76,7 +86,7 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
     setSaving(true);
     setSaveFailed(false);
     try {
-      if (editing) {
+      if (mode === 'update' && editing) {
         await updateFood({ ...editing, ...result.parsed });
       } else {
         await addFood({ ...result.parsed, source: 'manual' });
@@ -87,6 +97,11 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    void save(editing ? 'update' : 'create');
   }
 
   return (
@@ -212,6 +227,16 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
           <button type="button" className="secondary" onClick={onClose}>
             Cancel
           </button>
+          {nameDiverged && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={saving}
+              onClick={() => void save('create')}
+            >
+              Save as new food
+            </button>
+          )}
           <button type="submit" disabled={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Add to library'}
           </button>

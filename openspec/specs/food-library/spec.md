@@ -2,9 +2,7 @@
 
 ## Purpose
 Maintain a self-populating, per-user library of saved foods so repeat logging is a one-tap action: foods are captured automatically as they are logged, suggested per meal, searchable from the entry form's name field, and manageable (create/edit/archive) on a dedicated screen.
-
 ## Requirements
-
 ### Requirement: Personal food library
 The system SHALL maintain a per-user library of saved foods. Each library food MUST record a name, per-serving calories, carbs (g), protein (g), and fat (g), and a serving anchor (count label, defaulting to "serving", plus optional single-dimension equivalence per the serving-units capability), and MAY record a description (brand, prep notes) and a recipe (free-text prep instructions). Library foods MUST be deduplicated per user on the normalized (case-insensitive, trimmed) name.
 
@@ -72,6 +70,8 @@ As the user types in the name field, the system SHALL match against the library'
 ### Requirement: Library management
 The system SHALL provide a library management screen where the user can view saved foods, create a new food directly ("add food item"), edit a food's name, description, recipe, serving anchor (count label and equivalence), and nutrition values, and archive a food. Archived foods MUST be excluded from suggestions and name search but MUST NOT be deleted. Nutrition values MUST pass the same validation as food entries, and the serving anchor MUST pass serving-units validation. Each food's recipe, when present, MUST be viewable from this screen behind a collapsed "View recipe" disclosure rather than shown inline.
 
+When editing an existing food, the system SHALL additionally offer a secondary "save as new food" action that saves the form's current values as a new library food and leaves the edited food unchanged. This action MUST be offered only while the name in the form differs from the edited food's name under the same normalization the library deduplicates on, and MUST NOT replace or pre-empt the primary "save changes" action, which continues to save in place including under a changed name. Both actions MUST enforce the library's normalized-name deduplication: "save changes" against every other food, and "save as new food" against every food including the one being edited.
+
 #### Scenario: Create a food without logging it
 - **WHEN** the user creates a food from the library screen
 - **THEN** it is saved to the library and appears in name search without ever having been logged
@@ -91,6 +91,26 @@ The system SHALL provide a library management screen where the user can view sav
 #### Scenario: View a collapsed recipe
 - **WHEN** the user opens the library list for a food that has a recipe
 - **THEN** the recipe text is hidden behind a "View recipe" control until the user expands it
+
+#### Scenario: Fork a saved food into a new one
+- **WHEN** the user opens "PB&J" for editing, changes the name to "PB&J (crunchy)", adjusts its calories, and chooses "save as new food"
+- **THEN** a new library food "PB&J (crunchy)" is saved with the form's values, and "PB&J" keeps its original name and calories
+
+#### Scenario: Save as new is offered only once the name diverges
+- **WHEN** the user opens a food for editing and has not changed its name, or has only changed its capitalization or surrounding whitespace
+- **THEN** no "save as new food" action is offered, and "save changes" remains the only save
+
+#### Scenario: A changed name still saves in place
+- **WHEN** the user opens "Chicken" for editing, corrects the name to "Chicken breast", and chooses "save changes"
+- **THEN** the existing food is renamed in place and no second food is created
+
+#### Scenario: Fork rejects a name already in the library
+- **WHEN** the user edits "PB&J", changes the name to one that normalizes to an existing food's name, and chooses "save as new food"
+- **THEN** the save is rejected with the same duplicate-name error as any other colliding save, and no food is created or modified
+
+#### Scenario: Restoring the original name withdraws the fork
+- **WHEN** the user changes the name away from the edited food's name, the "save as new food" action appears, and the user restores the original name before submitting it
+- **THEN** the action is withdrawn, leaving "save changes" as the only save, so a fork can never be submitted under the edited food's own name
 
 ### Requirement: Snapshot semantics
 Food entries SHALL store their own copies of name, nutrition values, serving anchor, and logged amount and unit at logging time. Editing a library food MUST NOT change any existing entry.
@@ -113,3 +133,4 @@ When the user is defining a brand-new food in the entry form (not editing an exi
 #### Scenario: No control when there is nothing to show or set
 - **WHEN** the user is editing an existing entry, or has matched a library food with no recipe and is not defining a new food
 - **THEN** no recipe control is shown for that food in the entry form beyond what "Personal food library" and "Library management" already provide
+
