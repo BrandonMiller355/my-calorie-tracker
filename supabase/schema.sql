@@ -146,8 +146,8 @@ create policy "own foods delete" on foods
 -- written only by quick calories-only entries.)
 alter table foods add column recipe text;
 
--- Name-field suggestions: up to 3 foods most recently logged for the meal,
--- then up to 3 most often logged for it, deduped across the two groups and
+-- Name-field suggestions: up to 5 foods most recently logged for the meal,
+-- then up to 5 most often logged for it, deduped across the two groups and
 -- excluding archived foods. security invoker (the default), so RLS on both
 -- tables scopes everything to the calling user. `date` is YYYY-MM-DD text,
 -- which sorts correctly lexicographically.
@@ -181,7 +181,7 @@ as $$
     select food_id, row_number() over (order by last_date desc) as ord
     from meal_foods
     order by last_date desc
-    limit 3
+    limit 5
   ),
   most_used as (
     select food_id,
@@ -189,7 +189,7 @@ as $$
     from meal_foods
     where food_id not in (select food_id from recent)
     order by times_logged desc, last_date desc
-    limit 3
+    limit 5
   ),
   ranked as (
     select food_id, 'recent' as suggestion_group, ord from recent

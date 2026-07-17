@@ -147,8 +147,8 @@ class FakeRepository implements StorageRepository {
     const food = this.foods.get(id);
     if (food) this.foods.set(id, { ...food, archivedAt: new Date().toISOString() });
   }
-  // Mirrors the meal_suggestions() SQL: per-meal grouping, 3 recent then
-  // 3 most used, deduped, archived foods excluded.
+  // Mirrors the meal_suggestions() SQL: per-meal grouping, 5 recent then
+  // 5 most used, deduped, archived foods excluded.
   async getMealSuggestions(meal: Meal): Promise<MealSuggestions> {
     this.assertReads();
     const byFood = new Map<string, { lastDate: string; count: number }>();
@@ -164,12 +164,12 @@ class FakeRepository implements StorageRepository {
     const stats = [...byFood.entries()];
     const recent = stats
       .sort((a, b) => b[1].lastDate.localeCompare(a[1].lastDate))
-      .slice(0, 3)
+      .slice(0, 5)
       .map(([id]) => id);
     const mostUsed = stats
       .filter(([id]) => !recent.includes(id))
       .sort((a, b) => b[1].count - a[1].count || b[1].lastDate.localeCompare(a[1].lastDate))
-      .slice(0, 3)
+      .slice(0, 5)
       .map(([id]) => id);
     const toFood = (id: string) => ({ ...this.foods.get(id)! });
     return { recent: recent.map(toFood), mostUsed: mostUsed.map(toFood) };
