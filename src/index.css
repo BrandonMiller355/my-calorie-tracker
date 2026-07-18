@@ -2018,3 +2018,30 @@ input[type='search']::-webkit-search-cancel-button {
   flex: 1;
   min-width: 0;
 }
+
+/* Bulk-photo review rows: a text-log row with a thumbnail column */
+.bulk-photo-row {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.bulk-photo-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--r-card-s);
+  flex-shrink: 0;
+}
+
+.bulk-photo-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bulk-photo-candidate {
+  flex: 1;
+  min-width: 0;
+}

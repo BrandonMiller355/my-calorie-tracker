@@ -71,6 +71,23 @@ vi.mock('./TextLogOverlay', () => ({
   ),
 }));
 
+vi.mock('./BulkPhotoOverlay', () => ({
+  BulkPhotoOverlay: ({
+    meal,
+    onLogged,
+    onCancel,
+  }: {
+    meal: string;
+    onLogged: () => void;
+    onCancel: () => void;
+  }) => (
+    <div data-testid="bulk-photo-overlay" data-meal={meal}>
+      <button onClick={onLogged}>stub-bulk-logged</button>
+      <button onClick={onCancel}>stub-bulk-cancel</button>
+    </div>
+  ),
+}));
+
 vi.mock('./AiAnalyzeOverlay', () => ({
   AiAnalyzeOverlay: ({
     initialImage,
@@ -338,6 +355,45 @@ describe('EntryForm identify action', () => {
 function openTextLog() {
   fireEvent.click(screen.getByLabelText('Log foods from a text description'));
 }
+
+describe('EntryForm bulk-photos action', () => {
+  it('shows the bulk-photos action when adding', async () => {
+    await renderForm();
+    expect(screen.getByLabelText('Log foods from several photos')).toBeInTheDocument();
+  });
+
+  it('hides the bulk-photos action when editing', async () => {
+    await renderForm({ editing: ENTRY });
+    expect(screen.queryByLabelText('Log foods from several photos')).not.toBeInTheDocument();
+  });
+
+  it('opens the overlay with the selected meal and closes the dialog when all are logged', async () => {
+    const onClose = vi.fn();
+    await renderForm({ onClose });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Dinner' }));
+    await act(async () => {});
+    fireEvent.click(screen.getByLabelText('Log foods from several photos'));
+
+    expect(screen.getByTestId('bulk-photo-overlay')).toHaveAttribute('data-meal', 'dinner');
+    fireEvent.click(screen.getByText('stub-bulk-logged'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('cancelling the overlay returns to the untouched form', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'half-typed' } });
+    fireEvent.click(screen.getByLabelText('Log foods from several photos'));
+    fireEvent.click(screen.getByText('stub-bulk-cancel'));
+
+    expect(screen.queryByTestId('bulk-photo-overlay')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('half-typed');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(repository.addEntryCalls).toHaveLength(0);
+  });
+});
 
 describe('EntryForm text-log action', () => {
   it('shows the text-log action when adding', async () => {
