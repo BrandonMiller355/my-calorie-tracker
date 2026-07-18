@@ -26,6 +26,7 @@ import {
 } from '../types';
 import type { ResolvedTextLogItem } from '../api/logFromText';
 import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
+import { BulkPhotoOverlay } from './BulkPhotoOverlay';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
 import { IdentifyOverlay } from './IdentifyOverlay';
 import { TextLogOverlay } from './TextLogOverlay';
@@ -172,6 +173,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const [identifying, setIdentifying] = useState(false);
   /** Log-from-text overlay is open */
   const [textLogging, setTextLogging] = useState(false);
+  /** Bulk-photos overlay is open */
+  const [bulkLogging, setBulkLogging] = useState(false);
   /** Photo + note handed from identify's no-match to the AI estimate flow */
   const [estimateHandoff, setEstimateHandoff] = useState<{ image: string; note: string } | null>(
     null,
@@ -572,6 +575,15 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
               >
                 ✦ Photo
               </button>
+              <button
+                type="button"
+                className="ghost-chip"
+                onClick={() => setBulkLogging(true)}
+                aria-label="Log foods from several photos"
+                title="Log foods from several photos"
+              >
+                ✦ Photos
+              </button>
             </div>
           )}
         </div>
@@ -848,6 +860,16 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           onSingleItem={handleTextItem}
           onLogged={onClose}
           onCancel={() => setTextLogging(false)}
+        />
+      )}
+
+      {bulkLogging && (
+        <BulkPhotoOverlay
+          foods={foods}
+          date={date}
+          meal={meal}
+          onLogged={onClose}
+          onCancel={() => setBulkLogging(false)}
         />
       )}
 
