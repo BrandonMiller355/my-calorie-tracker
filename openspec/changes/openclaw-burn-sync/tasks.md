@@ -8,7 +8,7 @@
 
 - [x] 2.1 Append to `supabase/schema.sql`: `alter table daily_goals` dropping NOT NULL on `carbs`, `protein`, `fat` (null = no macro override, falls back to defaults at read time)
 - [x] 2.2 Append `set_day_burn(p_date text, p_calories numeric)`: security invoker, `insert into daily_goals (date, calories) values (p_date, p_calories) on conflict (user_id, date) do update set calories = excluded.calories`; comment the calories-only overwrite semantics
-- [ ] 2.3 Apply both via the Supabase dashboard SQL editor (after the app change from group 1 is deployed)
+- [x] 2.3 Apply both via the Supabase dashboard SQL editor (after the app change from group 1 is deployed)
 
 ## 3. Verification against the live project
 
