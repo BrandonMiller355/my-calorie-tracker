@@ -85,6 +85,18 @@ export interface Goals {
   fat: number;
 }
 
+/**
+ * A per-day goal override row. Calories is always present; null macros mean
+ * "no macro override for this date" (the row was created calories-only by an
+ * external burn sync) and the effective macro goals fall back to the defaults.
+ */
+export interface DayGoalOverride {
+  calories: number;
+  carbs: number | null;
+  protein: number | null;
+  fat: number | null;
+}
+
 export const DEFAULT_GOALS: Goals = {
   calories: 2000,
   carbs: 250,
