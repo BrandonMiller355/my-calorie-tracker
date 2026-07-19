@@ -223,6 +223,16 @@ describe('SupabaseRepository', () => {
     ).resolves.toBeNull();
   });
 
+  it('getGoalsForDate preserves null macros on a calories-only override row', async () => {
+    // A row written by set_day_burn (external burn sync) has null macros,
+    // meaning "no macro override" — the app falls back to defaults per field.
+    const row = { calories: 2740, carbs: null, protein: null, fat: null };
+    const { client } = fakeClient({ data: row });
+    await expect(new SupabaseRepository(client).getGoalsForDate('2026-07-05')).resolves.toEqual(
+      row,
+    );
+  });
+
   it('saveGoalsForDate upserts the goals payload with the date', async () => {
     const goals: Goals = { calories: 1800, carbs: 200, protein: 120, fat: 60 };
     const { client, calls } = fakeClient();

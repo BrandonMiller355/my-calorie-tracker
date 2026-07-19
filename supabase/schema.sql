@@ -249,3 +249,29 @@ alter table food_entries add column description text;
 alter table food_entries drop constraint food_entries_source_check;
 alter table food_entries add constraint food_entries_source_check
   check (source in ('manual', 'search', 'quick'));
+
+-- OpenClaw burn sync: a daily_goals row may now carry only calories. Null
+-- macros mean "no macro override for this date" — the app resolves them to
+-- the default goals row per field at read time. week_deficit_summary only
+-- reads dg.calories, so it is unaffected. Run in the dashboard AFTER
+-- deploying app code that handles null-macro override rows.
+alter table daily_goals alter column carbs drop not null;
+alter table daily_goals alter column protein drop not null;
+alter table daily_goals alter column fat drop not null;
+
+-- External write path for the OpenClaw machine (see docs/openclaw-access.md):
+-- upserts a calories-only burn goal for a date. Overwrite semantics are
+-- deliberate: calories is ALWAYS overwritten (the synced actual burn is
+-- authoritative, replacing any mid-day manual estimate), and macros are NEVER
+-- touched — left null on insert, left exactly as they were (null or concrete)
+-- on update. security invoker (the default), so RLS scopes the row to the
+-- calling user; user_id fills in from its default auth.uid() on insert.
+create function set_day_burn(p_date text, p_calories numeric)
+returns void
+language sql
+as $$
+  insert into daily_goals (date, calories)
+  values (p_date, p_calories)
+  on conflict (user_id, date)
+  do update set calories = excluded.calories;
+$$;

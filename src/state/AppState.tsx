@@ -14,6 +14,7 @@ import { computeWeeklyDeficit } from '../lib/weeklyDeficit';
 import type { StorageRepository } from '../storage';
 import {
   DEFAULT_GOALS,
+  type DayGoalOverride,
   type FoodEntry,
   type Goals,
   type LibraryFood,
@@ -29,8 +30,11 @@ interface AppState {
   defaultGoals: Goals;
   /** true until the user saves default goals for the first time */
   goalsAreDefault: boolean;
-  /** override for `date`; null when this day uses defaultGoals */
-  dayGoalOverride: Goals | null;
+  /**
+   * Override for `date`; null when this day uses defaultGoals. May be
+   * calories-only (null macros) when written by the external burn sync.
+   */
+  dayGoalOverride: DayGoalOverride | null;
   /** Non-archived food library, loaded once per session */
   foods: LibraryFood[];
   /** true when loading entries or goals from the backend failed */
@@ -50,7 +54,7 @@ type Action =
   | { type: 'entry-deleted'; id: string }
   | { type: 'default-goals-loaded'; goals: Goals | null }
   | { type: 'default-goals-saved'; goals: Goals }
-  | { type: 'day-goal-loaded'; date: string; goals: Goals | null }
+  | { type: 'day-goal-loaded'; date: string; goals: DayGoalOverride | null }
   | { type: 'day-goal-saved'; goals: Goals }
   | { type: 'day-goal-cleared' }
   | { type: 'foods-loaded'; foods: LibraryFood[] }
@@ -137,7 +141,11 @@ function reducer(state: AppState, action: Action): AppState {
 export type NewEntryInput = Omit<FoodEntry, 'id'> & { description?: string; recipe?: string };
 
 export interface AppContextValue extends AppState {
-  /** Effective goals for `date`: dayGoalOverride if set, else defaultGoals */
+  /**
+   * Effective goals for `date`, merged per field: the override's value where
+   * present, defaultGoals' where absent (calories-only overrides have null
+   * macros). No override at all means defaultGoals unchanged.
+   */
   goals: Goals;
   /** true when `date` has its own override rather than using defaultGoals */
   dayGoalIsOverridden: boolean;
@@ -417,8 +425,20 @@ export function AppProvider({
     [repository],
   );
 
-  const goals = state.dayGoalOverride ?? state.defaultGoals;
-  const dayGoalIsOverridden = state.dayGoalOverride !== null;
+  const { dayGoalOverride, defaultGoals } = state;
+  const goals = useMemo<Goals>(
+    () =>
+      dayGoalOverride
+        ? {
+            calories: dayGoalOverride.calories,
+            carbs: dayGoalOverride.carbs ?? defaultGoals.carbs,
+            protein: dayGoalOverride.protein ?? defaultGoals.protein,
+            fat: dayGoalOverride.fat ?? defaultGoals.fat,
+          }
+        : defaultGoals,
+    [dayGoalOverride, defaultGoals],
+  );
+  const dayGoalIsOverridden = dayGoalOverride !== null;
 
   const { deficit: weeklyDeficitToDate, hasMissingDays: weeklyDeficitMissingDays } =
     computeWeeklyDeficit(state.weekSummary, state.date, todayKey());

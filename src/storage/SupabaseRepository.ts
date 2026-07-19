@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   DEFAULT_GOALS,
+  type DayGoalOverride,
   type FoodEntry,
   type Goals,
   type LibraryFood,
@@ -184,14 +185,14 @@ export class SupabaseRepository implements StorageRepository {
     if (error) throw new Error(`Saving goals failed: ${error.message}`);
   }
 
-  async getGoalsForDate(date: string): Promise<Goals | null> {
+  async getGoalsForDate(date: string): Promise<DayGoalOverride | null> {
     const { data, error } = await this.client
       .from('daily_goals')
       .select('calories, carbs, protein, fat')
       .eq('date', date)
       .maybeSingle();
     if (error) throw new Error(`Loading day goals failed: ${error.message}`);
-    return data as Goals | null;
+    return data as DayGoalOverride | null;
   }
 
   async saveGoalsForDate(date: string, goals: Goals): Promise<void> {

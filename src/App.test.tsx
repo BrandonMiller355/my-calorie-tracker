@@ -3,10 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 import { getProductByBarcode, searchFoods } from './api/openFoodFacts';
 import { isBarcodeScanningSupported } from './components/BarcodeScanner';
-import { addDays } from './lib/date';
+import { addDays, todayKey } from './lib/date';
 import type { StorageRepository } from './storage';
 import {
   DEFAULT_GOALS,
+  type DayGoalOverride,
   type FoodEntry,
   type FoodSearchResult,
   type Goals,
@@ -75,7 +76,7 @@ type RouterEntry = string | { pathname: string; state: unknown };
 class FakeRepository implements StorageRepository {
   private entries = new Map<string, FoodEntry>();
   private defaultGoals: Goals | null = null;
-  private dayGoals = new Map<string, Goals>();
+  private dayGoals = new Map<string, DayGoalOverride>();
   private foods = new Map<string, LibraryFood>();
   private weeklyDeficitGoal: number | null = null;
   failReads = false;
@@ -112,7 +113,7 @@ class FakeRepository implements StorageRepository {
     this.assertWrites();
     this.defaultGoals = { ...goals };
   }
-  async getGoalsForDate(date: string): Promise<Goals | null> {
+  async getGoalsForDate(date: string): Promise<DayGoalOverride | null> {
     this.assertReads();
     const goals = this.dayGoals.get(date);
     return goals ? { ...goals } : null;
@@ -120,6 +121,15 @@ class FakeRepository implements StorageRepository {
   async saveGoalsForDate(date: string, goals: Goals): Promise<void> {
     this.assertWrites();
     this.dayGoals.set(date, { ...goals });
+  }
+  // Mirrors the set_day_burn() SQL: insert a calories-only row (null macros),
+  // or overwrite only calories on an existing row.
+  setDayBurn(date: string, calories: number): void {
+    const existing = this.dayGoals.get(date);
+    this.dayGoals.set(
+      date,
+      existing ? { ...existing, calories } : { calories, carbs: null, protein: null, fat: null },
+    );
   }
   async clearGoalsForDate(date: string): Promise<void> {
     this.assertWrites();
@@ -251,6 +261,21 @@ describe('App (spec scenario walkthrough)', () => {
 
     fireEvent.click(screen.getByText('Use default'));
     expect(await screen.findByText('2000 kcal left')).toBeInTheDocument();
+  });
+
+  it('applies a calories-only override (synced burn) with default macro goals', async () => {
+    const repo = new FakeRepository();
+    repo.setDayBurn(todayKey(), 1500);
+    renderApp(repo);
+    await screen.findByRole('region', { name: 'Breakfast' });
+
+    // Overridden calories, macros fall back to the defaults per field
+    expect(screen.getByText('1500 kcal left')).toBeInTheDocument();
+    expect(screen.getByText(`/ ${DEFAULT_GOALS.carbs} g`)).toBeInTheDocument();
+    expect(screen.getByText(`/ ${DEFAULT_GOALS.protein} g`)).toBeInTheDocument();
+    expect(screen.getByText(`/ ${DEFAULT_GOALS.fat} g`)).toBeInTheDocument();
+    // The row still counts as an override in the editor
+    expect(screen.getByText(/Custom goal for today/)).toBeInTheDocument();
   });
 
   it('adds an entry, groups it by meal, and updates totals', async () => {
