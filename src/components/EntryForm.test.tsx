@@ -170,6 +170,8 @@ class FakeRepository implements StorageRepository {
   updateEntryCalls: unknown[] = [];
   updateFoodCalls: unknown[] = [];
   addFoodCalls: unknown[] = [];
+  library: LibraryFood[] = [CHICKEN, COOKIE];
+  lastUsed: Record<string, string> = {};
 
   async getEntriesByDate(): Promise<FoodEntry[]> {
     return [];
@@ -191,7 +193,7 @@ class FakeRepository implements StorageRepository {
   async saveGoalsForDate(): Promise<void> {}
   async clearGoalsForDate(): Promise<void> {}
   async getFoods(): Promise<LibraryFood[]> {
-    return [CHICKEN, COOKIE];
+    return this.library;
   }
   async addFood(food: unknown): Promise<void> {
     this.addFoodCalls.push(food);
@@ -202,6 +204,9 @@ class FakeRepository implements StorageRepository {
   async archiveFood(): Promise<void> {}
   async getMealSuggestions(): Promise<MealSuggestions> {
     return { recent: [], mostUsed: [] };
+  }
+  async getFoodLastUsed(): Promise<Record<string, string>> {
+    return this.lastUsed;
   }
   async getWeekDeficitSummary(): Promise<WeekDeficitDay[]> {
     return [];
@@ -486,6 +491,24 @@ describe('EntryForm text-log action', () => {
 
     expect(screen.queryByTestId('text-log-overlay')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toHaveValue('half-typed');
+  });
+});
+
+describe('EntryForm name search ordering', () => {
+  it('puts the most recently logged match first among equal-quality matches', async () => {
+    const repository = new FakeRepository();
+    repository.library = [
+      { ...CHICKEN, id: 'food-crumble', name: 'Apple crumble' },
+      { ...CHICKEN, id: 'food-pie', name: 'Apple pie' },
+    ];
+    // Alphabetical order would put the crumble first; recency must win
+    repository.lastUsed = { 'food-pie': '2026-07-08', 'food-crumble': '2026-07-01' };
+    await renderForm({ repository });
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'apple' } });
+    const options = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(options[0]).toHaveTextContent('Apple pie');
+    expect(options[1]).toHaveTextContent('Apple crumble');
   });
 });
 

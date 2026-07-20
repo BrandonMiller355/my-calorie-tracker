@@ -242,6 +242,13 @@ export class SupabaseRepository implements StorageRepository {
     };
   }
 
+  async getFoodLastUsed(): Promise<Record<string, string>> {
+    const { data, error } = await this.client.rpc('food_last_used');
+    if (error) throw new Error(`Loading food usage failed: ${error.message}`);
+    const rows = (data ?? []) as { food_id: string; last_date: string }[];
+    return Object.fromEntries(rows.map((r) => [r.food_id, r.last_date]));
+  }
+
   async getWeekDeficitSummary(from: string, through: string): Promise<WeekDeficitDay[]> {
     const { data, error } = await this.client.rpc('week_deficit_summary', {
       p_from: from,

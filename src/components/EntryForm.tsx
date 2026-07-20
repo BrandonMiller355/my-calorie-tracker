@@ -122,7 +122,8 @@ function ServingAnchorFields({
 }
 
 export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: EntryFormProps) {
-  const { addEntry, updateEntry, updateFood, foods, getMealSuggestions } = useAppState();
+  const { addEntry, updateEntry, updateFood, foods, foodLastUsed, getMealSuggestions } =
+    useAppState();
   const navigate = useNavigate();
   const nameInputId = useId();
   const amountInputId = useId();
@@ -301,7 +302,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
       { label: `Most used · ${MEAL_LABELS[meal]}`, foods: suggestions.mostUsed },
     ];
   } else if (!saving && query !== '') {
-    groups = [{ label: 'My foods', foods: matchFoods(foods, query) }];
+    groups = [{ label: 'My foods', foods: matchFoods(foods, query, foodLastUsed) }];
   }
 
   const actions: ComboboxAction[] = saving
