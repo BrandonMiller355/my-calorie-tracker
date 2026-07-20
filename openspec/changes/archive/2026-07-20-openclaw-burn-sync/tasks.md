@@ -12,10 +12,10 @@
 
 ## 3. Verification against the live project
 
-- [ ] 3.1 Insert case: call `rpc/set_day_burn` (authenticated) for a date with no `daily_goals` row; confirm the created row has the passed calories and null macros, and the app shows default macro goals with the overridden calories for that date
-- [ ] 3.2 Conflict case: set custom macros for that date in the app, call `set_day_burn` again with a different calorie value; confirm calories changed and macros are untouched
-- [ ] 3.3 Read case: call `rpc/week_deficit_summary` with `p_from = p_through` for a logged date and confirm `consumed_calories` matches the app's daily total
-- [ ] 3.4 Confirm the weekly deficit widget in the app reflects the synced burn value for the test date, then clean up test rows
+- [x] 3.1 Insert case: call `rpc/set_day_burn` (authenticated) for a date with no `daily_goals` row; confirm the created row has the passed calories and null macros, and the app shows default macro goals with the overridden calories for that date
+- [x] 3.2 Conflict case: set custom macros for that date in the app, call `set_day_burn` again with a different calorie value; confirm calories changed and macros are untouched
+- [x] 3.3 Read case: call `rpc/week_deficit_summary` with `p_from = p_through` for a logged date and confirm `consumed_calories` matches the app's daily total
+- [x] 3.4 Confirm the weekly deficit widget in the app reflects the synced burn value for the test date, then clean up test rows
 
 ## 4. OpenClaw access documentation
 
