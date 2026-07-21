@@ -49,11 +49,15 @@ When the name field is focused and empty, the system SHALL suggest up to 3 libra
 - **THEN** only those foods are suggested; no foods from other meals fill the remaining slots
 
 ### Requirement: Library-first name search
-As the user types in the name field, the system SHALL match against the library's food names and descriptions (case-insensitive) and show matching foods in a dropdown, each with its description as a secondary line. The dropdown MUST always offer fixed actions after any matches: searching the online food database for the typed text and using the typed text as a new food via manual entry (both only while text is typed), and logging calories only (per the quick-calorie-logging capability) as the last item in both the empty-field and typing states. Selecting a library food SHALL pre-fill the form with its nutrition values and serving anchor, and populate the unit picker from that anchor.
+As the user types in the name field, the system SHALL match against the library's food names and descriptions (case-insensitive) and show matching foods in a dropdown, each with its description as a secondary line. Matches SHALL be ordered by match quality first (name matches above description-only matches), then by how recently each food was last logged (most recent first, across all meals), with never-logged foods last in alphabetical order. The dropdown MUST always offer fixed actions after any matches: searching the online food database for the typed text and using the typed text as a new food via manual entry (both only while text is typed), and logging calories only (per the quick-calorie-logging capability) as the last item in both the empty-field and typing states. Selecting a library food SHALL pre-fill the form with its nutrition values and serving anchor, and populate the unit picker from that anchor.
 
 #### Scenario: Match on description
 - **WHEN** the library contains "PB&J" with description "15g jelly, 16g pbfit, 2 sara lee slices" and the user types "pbfit"
 - **THEN** "PB&J" appears in the dropdown
+
+#### Scenario: Recently used matches come first
+- **WHEN** the library contains "Apple crumble" (last logged weeks ago) and "Apple pie" (logged yesterday) and the user types "apple"
+- **THEN** "Apple pie" appears above "Apple crumble" in the dropdown
 
 #### Scenario: Select a library food
 - **WHEN** the user selects a library food anchored at "1 can (drained) = 120 g" from the dropdown

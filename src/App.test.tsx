@@ -184,6 +184,18 @@ class FakeRepository implements StorageRepository {
     const toFood = (id: string) => ({ ...this.foods.get(id)! });
     return { recent: recent.map(toFood), mostUsed: mostUsed.map(toFood) };
   }
+  // Mirrors the food_last_used() SQL: max entry date per linked food.
+  async getFoodLastUsed(): Promise<Record<string, string>> {
+    this.assertReads();
+    const lastUsed: Record<string, string> = {};
+    for (const e of this.entries.values()) {
+      if (!e.foodId) continue;
+      if (lastUsed[e.foodId] === undefined || e.date > lastUsed[e.foodId]) {
+        lastUsed[e.foodId] = e.date;
+      }
+    }
+    return lastUsed;
+  }
   async getWeekDeficitSummary(from: string, through: string): Promise<WeekDeficitDay[]> {
     this.assertReads();
     const days: WeekDeficitDay[] = [];

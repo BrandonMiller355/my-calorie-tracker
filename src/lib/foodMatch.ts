@@ -44,17 +44,25 @@ function rank(food: LibraryFood, tokens: string[]): number | null {
  * Case-insensitive, token-based match over name + description of the
  * in-memory library. Query words can appear in any order and don't need to
  * be contiguous, so "fat free cheese" matches "Cheese, Cheddar, Fat Free,
- * Shred". Name matches are ranked above description-only matches, ties
- * broken alphabetically.
+ * Shred". Name matches are ranked above description-only matches; within a
+ * rank, most recently logged first (per `lastUsed`, food id → YYYY-MM-DD,
+ * which compares correctly as text), never-logged foods last alphabetically.
  */
-export function matchFoods(foods: LibraryFood[], query: string): LibraryFood[] {
+export function matchFoods(
+  foods: LibraryFood[],
+  query: string,
+  lastUsed: Record<string, string> = {},
+): LibraryFood[] {
   const tokens = tokenize(query);
   if (tokens.length === 0) return [];
   return foods
     .flatMap((food) => {
       const r = rank(food, tokens);
-      return r === null ? [] : [{ food, r }];
+      return r === null ? [] : [{ food, r, used: lastUsed[food.id] ?? '' }];
     })
-    .sort((a, b) => a.r - b.r || a.food.name.localeCompare(b.food.name))
+    .sort(
+      (a, b) =>
+        a.r - b.r || b.used.localeCompare(a.used) || a.food.name.localeCompare(b.food.name),
+    )
     .map(({ food }) => food);
 }
