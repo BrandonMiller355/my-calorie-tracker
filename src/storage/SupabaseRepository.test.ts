@@ -318,6 +318,19 @@ describe('SupabaseRepository', () => {
     });
   });
 
+  it('getFoodLastUsed calls the food_last_used function and maps rows to a record', async () => {
+    const { client, calls } = fakeClient({
+      data: [
+        { food_id: 'food-1', last_date: '2026-07-18' },
+        { food_id: 'food-2', last_date: '2026-07-02' },
+      ],
+    });
+    const lastUsed = await new SupabaseRepository(client).getFoodLastUsed();
+
+    expect(calls).toEqual([{ method: 'rpc', args: ['food_last_used', undefined] }]);
+    expect(lastUsed).toEqual({ 'food-1': '2026-07-18', 'food-2': '2026-07-02' });
+  });
+
   it('getWeekDeficitSummary calls the RPC with the date range and maps snake_case rows', async () => {
     const rows = [
       { date: '2026-06-29', consumed_calories: 1800, effective_goal_calories: 2000, has_entries: true },
@@ -404,6 +417,7 @@ describe('SupabaseRepository', () => {
     ['updateFood', (r: SupabaseRepository) => r.updateFood(food)],
     ['archiveFood', (r: SupabaseRepository) => r.archiveFood('food-1')],
     ['getMealSuggestions', (r: SupabaseRepository) => r.getMealSuggestions('breakfast')],
+    ['getFoodLastUsed', (r: SupabaseRepository) => r.getFoodLastUsed()],
     [
       'getWeekDeficitSummary',
       (r: SupabaseRepository) => r.getWeekDeficitSummary('2026-06-29', '2026-07-05'),

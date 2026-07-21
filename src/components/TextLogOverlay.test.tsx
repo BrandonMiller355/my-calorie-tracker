@@ -100,6 +100,9 @@ class FakeRepository implements StorageRepository {
   async getMealSuggestions(): Promise<MealSuggestions> {
     return { recent: [], mostUsed: [] };
   }
+  async getFoodLastUsed(): Promise<Record<string, string>> {
+    return {};
+  }
   async getWeekDeficitSummary(): Promise<WeekDeficitDay[]> {
     return [];
   }

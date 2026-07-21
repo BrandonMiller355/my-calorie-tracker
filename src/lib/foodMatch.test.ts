@@ -79,4 +79,22 @@ describe('matchFoods', () => {
   it('requires every token to match, missing one excludes the food', () => {
     expect(matchFoods(library, 'grilled tofu')).toEqual([]);
   });
+
+  it('puts the most recently used food first within a rank', () => {
+    // Alphabetical order is Chicken breast, Chickpea salad; recency flips it
+    const lastUsed = { '2': '2026-07-19', '1': '2026-07-10' };
+    expect(matchFoods(library, 'chick', lastUsed).map((f) => f.id)).toEqual(['2', '1', '5']);
+  });
+
+  it('never lets recency outrank match quality', () => {
+    // "Chicken breast" matches 'grilled' only via its description; even used
+    // yesterday it stays below the name match
+    const lastUsed = { '1': '2026-07-19' };
+    expect(matchFoods(library, 'grilled', lastUsed).map((f) => f.id)).toEqual(['3', '1']);
+  });
+
+  it('sorts never-used foods after used ones, alphabetically', () => {
+    const lastUsed = { '2': '2026-07-19' };
+    expect(matchFoods(library, 'chick', lastUsed).map((f) => f.id)).toEqual(['2', '1', '5']);
+  });
 });

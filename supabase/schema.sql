@@ -275,3 +275,22 @@ as $$
   on conflict (user_id, date)
   do update set calories = excluded.calories;
 $$;
+
+-- Name-search recency: the date each food was last logged, so the entry
+-- form's dropdown can put most recently used matches first. `date` is
+-- YYYY-MM-DD text, which sorts correctly lexicographically. security invoker
+-- (the default), so RLS scopes the rows to the calling user. Run in the
+-- dashboard BEFORE deploying app code that calls it.
+create function food_last_used()
+returns table (
+  food_id uuid,
+  last_date text
+)
+language sql
+stable
+as $$
+  select e.food_id, max(e.date) as last_date
+  from food_entries e
+  where e.food_id is not null
+  group by e.food_id;
+$$;

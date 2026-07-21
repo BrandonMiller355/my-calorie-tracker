@@ -42,6 +42,11 @@ export interface StorageRepository {
   /** Recent and most-used foods for a meal, computed server-side. */
   getMealSuggestions(meal: Meal): Promise<MealSuggestions>;
   /**
+   * Food id → the local date (YYYY-MM-DD) it was last logged, computed
+   * server-side across all entries. Foods never logged have no key.
+   */
+  getFoodLastUsed(): Promise<Record<string, string>>;
+  /**
    * Per-date consumed calories, effective calorie-burn goal (day override
    * falling back to the default), and whether any entries exist, for every
    * date in `[from, through]` inclusive, computed server-side in one request.

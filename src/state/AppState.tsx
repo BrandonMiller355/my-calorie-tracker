@@ -37,6 +37,11 @@ interface AppState {
   dayGoalOverride: DayGoalOverride | null;
   /** Non-archived food library, loaded once per session */
   foods: LibraryFood[];
+  /**
+   * Food id → local date (YYYY-MM-DD) it was last logged, for recency-first
+   * name search. Loaded once per session, then kept fresh as entries save.
+   */
+  foodLastUsed: Record<string, string>;
   /** true when loading entries or goals from the backend failed */
   loadFailed: boolean;
   /** null when the user has never set a weekly deficit goal */
@@ -58,6 +63,7 @@ type Action =
   | { type: 'day-goal-saved'; goals: Goals }
   | { type: 'day-goal-cleared' }
   | { type: 'foods-loaded'; foods: LibraryFood[] }
+  | { type: 'food-last-used-loaded'; lastUsed: Record<string, string> }
   | { type: 'food-added'; food: LibraryFood }
   | { type: 'food-updated'; food: LibraryFood }
   | { type: 'food-archived'; id: string }
@@ -66,6 +72,17 @@ type Action =
   | { type: 'week-summary-loaded'; date: string; days: WeekDeficitDay[] }
   | { type: 'load-failed' }
   | { type: 'retry-load' };
+
+/** Records `entry` as a use of its food when it's the newest use known. */
+function withEntryUse(
+  lastUsed: Record<string, string>,
+  entry: FoodEntry,
+): Record<string, string> {
+  if (!entry.foodId) return lastUsed;
+  const existing = lastUsed[entry.foodId];
+  if (existing !== undefined && existing >= entry.date) return lastUsed;
+  return { ...lastUsed, [entry.foodId]: entry.date };
+}
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -81,14 +98,21 @@ function reducer(state: AppState, action: Action): AppState {
       // Ignore loads for a date the user has already navigated away from
       if (action.date !== state.date) return state;
       return { ...state, entries: action.entries, entriesLoading: false };
-    case 'entry-added':
-      if (action.entry.date !== state.date) return state;
-      return { ...state, entries: [...state.entries, action.entry] };
+    case 'entry-added': {
+      // The food's last use advances even when the entry targets another date
+      const foodLastUsed = withEntryUse(state.foodLastUsed, action.entry);
+      if (action.entry.date !== state.date) return { ...state, foodLastUsed };
+      return { ...state, foodLastUsed, entries: [...state.entries, action.entry] };
+    }
     case 'entry-updated': {
       const remaining = state.entries.filter((e) => e.id !== action.entry.id);
       // The edit may have moved the entry to another date
       if (action.entry.date === state.date) remaining.push(action.entry);
-      return { ...state, entries: remaining };
+      return {
+        ...state,
+        entries: remaining,
+        foodLastUsed: withEntryUse(state.foodLastUsed, action.entry),
+      };
     }
     case 'entry-deleted':
       return { ...state, entries: state.entries.filter((e) => e.id !== action.id) };
@@ -108,6 +132,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, dayGoalOverride: null };
     case 'foods-loaded':
       return { ...state, foods: action.foods };
+    case 'food-last-used-loaded':
+      return { ...state, foodLastUsed: action.lastUsed };
     case 'food-added':
       return { ...state, foods: [...state.foods, action.food] };
     case 'food-updated':
@@ -192,6 +218,7 @@ export function AppProvider({
     goalsAreDefault: true,
     dayGoalOverride: null,
     foods: [],
+    foodLastUsed: {},
     loadFailed: false,
     weeklyDeficitGoal: null,
     weekSummary: [],
@@ -281,6 +308,21 @@ export function AppProvider({
     repository.getFoods().then(
       (foods) => {
         if (!cancelled) dispatch({ type: 'foods-loaded', foods });
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [repository, reloadKey]);
+
+  // Usage recency only orders name-search results, so a failed load likewise
+  // degrades silently (matches just fall back to alphabetical order).
+  useEffect(() => {
+    let cancelled = false;
+    repository.getFoodLastUsed().then(
+      (lastUsed) => {
+        if (!cancelled) dispatch({ type: 'food-last-used-loaded', lastUsed });
       },
       () => {},
     );
