@@ -101,6 +101,18 @@ export function TextLogOverlay({
   }
 
   /**
+   * Returns to the input phase so the description can be tweaked and reparsed.
+   * The text is still in state, so it comes back prefilled; the review rows are
+   * dropped since a fresh parse will replace them.
+   */
+  function handleRefine() {
+    setSaveFailed(false);
+    setParseError(null);
+    setRows([]);
+    setPhase('entering');
+  }
+
+  /**
    * Logs rows one at a time, dropping each from the list as it lands. On a
    * failure the already-added entries stay added and the confirm button
    * retries only what's left in the list.
@@ -268,6 +280,14 @@ export function TextLogOverlay({
           {saving
             ? 'Adding…'
             : `Add ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`}
+        </button>
+        <button
+          type="button"
+          className="ai-secondary"
+          onClick={handleRefine}
+          disabled={saving}
+        >
+          Refine description
         </button>
       </div>
       <button type="button" className="scanner-cancel secondary" onClick={onCancel} disabled={saving}>

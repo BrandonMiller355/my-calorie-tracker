@@ -360,6 +360,30 @@ describe('TextLogOverlay review phase', () => {
     ]);
   });
 
+  it('refine returns to the input with the description preserved and reparses', async () => {
+    logFromTextMock.mockResolvedValue([MATCH_BREAD, ESTIMATE_PB]);
+    const { repository, onCancel } = await renderOverlay();
+    await send('bred and pb');
+
+    fireEvent.click(screen.getByText('Refine description'));
+
+    // Back at the input, original text still there, nothing logged or cancelled
+    const input = screen.getByLabelText('What did you eat?');
+    expect(input).toHaveValue('bred and pb');
+    expect(screen.queryByText('Check these before logging')).not.toBeInTheDocument();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(repository.addEntryCalls).toHaveLength(0);
+
+    // Tweaking and resending reparses into a fresh review
+    logFromTextMock.mockResolvedValue([MATCH_BREAD, MATCH_RICE]);
+    fireEvent.change(input, { target: { value: 'bread and rice' } });
+    fireEvent.click(screen.getByText('Log it'));
+    await act(async () => {});
+
+    expect(screen.getByText('Add 2 entries')).toBeInTheDocument();
+    expect(screen.getByText('Jasmine rice')).toBeInTheDocument();
+  });
+
   it('dismissing the review logs nothing', async () => {
     logFromTextMock.mockResolvedValue([MATCH_BREAD, ESTIMATE_PB]);
     const { repository, onCancel } = await renderOverlay();

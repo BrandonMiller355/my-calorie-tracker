@@ -1927,6 +1927,22 @@ input[type='search']::-webkit-search-cancel-button {
   cursor: default;
 }
 
+.ai-secondary {
+  height: var(--button-h);
+  padding: 0 18px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--r-input);
+  background: var(--surface);
+  color: var(--ink);
+  font: 700 15px/1 var(--font);
+  cursor: pointer;
+}
+
+.ai-secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* AI identify */
 .identify-message {
   color: #fff;
