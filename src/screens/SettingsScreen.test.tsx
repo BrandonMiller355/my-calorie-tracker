@@ -99,6 +99,53 @@ describe('SettingsScreen goal labeling', () => {
   });
 });
 
+describe('SettingsScreen macro/calorie mismatch warning', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('warns before saving when macros do not add up to the calorie goal', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Default daily goal' });
+
+    fireEvent.change(screen.getByLabelText('Calorie burn (kcal)'), {
+      target: { value: '5000' },
+    });
+    fireEvent.click(screen.getByText('Save goals'));
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(confirmSpy.mock.calls[0][0]).toContain('but your calorie goal is 5000 kcal');
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+  });
+
+  it('does not save when the user cancels the mismatch warning', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Default daily goal' });
+
+    fireEvent.change(screen.getByLabelText('Calorie burn (kcal)'), {
+      target: { value: '5000' },
+    });
+    fireEvent.click(screen.getByText('Save goals'));
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Saved ✓')).not.toBeInTheDocument();
+  });
+
+  it('saves without warning when macros roughly match the calorie goal', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Default daily goal' });
+
+    // Built-in defaults (2000 kcal vs ~1985 from macros) are within tolerance.
+    fireEvent.click(screen.getByText('Save goals'));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+  });
+});
+
 describe('SettingsScreen weekly deficit goal', () => {
   it('starts blank when no weekly deficit goal has been set', async () => {
     renderSettings();
@@ -118,7 +165,7 @@ describe('SettingsScreen weekly deficit goal', () => {
     expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
   });
 
-  it('rejects a non-positive weekly deficit goal', async () => {
+  it('accepts a weekly deficit goal of zero', async () => {
     renderSettings();
     await screen.findByRole('heading', { name: 'Weekly deficit goal' });
 
@@ -127,8 +174,20 @@ describe('SettingsScreen weekly deficit goal', () => {
     });
     fireEvent.click(screen.getByText('Save weekly goal'));
 
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+  });
+
+  it('rejects a negative weekly deficit goal', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Weekly deficit goal' });
+
+    fireEvent.change(screen.getByLabelText('Weekly deficit goal (kcal)'), {
+      target: { value: '-100' },
+    });
+    fireEvent.click(screen.getByText('Save weekly goal'));
+
     expect(
-      await screen.findByText('Weekly deficit goal must be a number greater than 0.'),
+      await screen.findByText('Weekly deficit goal must be a number of 0 or more.'),
     ).toBeInTheDocument();
   });
 });
