@@ -117,6 +117,55 @@ entries for that date (`0` when none exist, with `has_entries` false).
 default fallback — after a successful `set_day_burn` it reflects the synced
 value.
 
+## 4. Log a food: read the library, insert an entry
+
+Unlike the burn write, logging a food uses no custom RPC — it reads and writes
+the app's tables directly through PostgREST, scoped by RLS to the app user.
+
+**Read the food library** (non-archived), to match a described food to a saved
+one:
+
+```
+GET {SUPABASE_URL}/rest/v1/foods?archived_at=is.null&select=id,name,description,serving_label,serving_size_amount,serving_size_unit,calories,carbs,protein,fat&order=name
+apikey: {SUPABASE_PUBLISHABLE_KEY}
+Authorization: Bearer <access_token>
+```
+
+**Insert a food entry** into `food_entries`. `id` has no server default, so the
+caller generates a UUID. `user_id` fills in from its `auth.uid()` default and
+RLS's insert check enforces it. Nutrition is per one serving; `quantity` is the
+serving multiplier (log by serving count, so `amount == quantity` and
+`unit == serving_label`):
+
+```
+POST {SUPABASE_URL}/rest/v1/food_entries
+apikey: {SUPABASE_PUBLISHABLE_KEY}
+Authorization: Bearer <access_token>
+Content-Type: application/json
+Prefer: return=representation
+
+{
+  "id": "<uuid>", "date": "2026-07-24", "meal": "breakfast",
+  "name": "egg white omelet", "amount": 1, "unit": "serving",
+  "serving_label": "serving", "quantity": 1,
+  "calories": 220, "carbs": 4, "protein": 30, "fat": 9,
+  "source": "quick", "description": "egg white omelet"
+}
+```
+
+Two shapes:
+
+- **Library match** — set `food_id` to the matched food, `source: "manual"`,
+  `serving_label` (and `serving_size_amount`/`serving_size_unit` if the food has
+  them) to the food's own anchor, and nutrition to the food's saved values. This
+  is the same linked entry the app writes.
+- **Estimate** — no `food_id`, `source: "quick"`, `serving_label: "serving"`,
+  and the description carried on the entry. Deliberately does **not** create a
+  library food; the estimate lives only on the entry. (`source` must be one of
+  `manual`/`search`/`quick`; `unit` must be a measure unit or equal
+  `serving_label`; `serving_size_amount`/`serving_size_unit` are all-or-nothing
+  — the table's CHECK constraints reject anything else with a `400`.)
+
 ## Errors worth handling
 
 - `400` from the auth endpoint — bad credentials or a consumed refresh token;

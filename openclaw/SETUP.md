@@ -44,18 +44,28 @@ Straight from a shell first (loads the env file just for the test):
 
 ```bash
 set -a; source ~/.openclaw/.env; set +a
-~/.openclaw/skills/cal-tracker/scripts/caltracker.sh consumed today
-~/.openclaw/skills/cal-tracker/scripts/caltracker.sh set-burn today 2500
+S=~/.openclaw/skills/cal-tracker/scripts/caltracker.sh
+"$S" consumed today
+"$S" set-burn today 2500
+"$S" find
+"$S" log '{"meal":"snacks","name":"smoke test food","description":"delete me","calories":100,"carbs":1,"protein":1,"fat":1}'
 ```
 
 The `set-burn` output's `effective_goal_calories` should read back `2500`,
 and the app's log screen for today should show a custom calorie goal of 2500
-with the macro goals still at your defaults. Reset the day afterward by
-clearing the custom goal in the app (or setting the burn to the right
-number).
+with the macro goals still at your defaults. `find` prints your saved foods.
+`log` prints the inserted entry and it appears under today's snacks in the app
+— delete that test entry there, then reset the day by clearing the custom goal
+(or setting the burn back).
+
+The `find`/`log` path writes straight to the `food_entries` table through RLS,
+so unlike the burn sync it needs **no new database function** — nothing extra
+to deploy.
 
 Then through the agent: ask OpenClaw *"how many calories have I eaten
-today?"* and it should invoke the skill and answer with the number.
+today?"* and it should invoke the skill and answer, and say *"log an egg white
+omelet for breakfast"* — it should `find`, then `log` a matched or quick entry
+and tell you which.
 
 ## 4. Daily burn-sync cron job
 

@@ -118,7 +118,7 @@ describe('SettingsScreen weekly deficit goal', () => {
     expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
   });
 
-  it('rejects a non-positive weekly deficit goal', async () => {
+  it('saves a weekly deficit goal of zero', async () => {
     renderSettings();
     await screen.findByRole('heading', { name: 'Weekly deficit goal' });
 
@@ -127,8 +127,20 @@ describe('SettingsScreen weekly deficit goal', () => {
     });
     fireEvent.click(screen.getByText('Save weekly goal'));
 
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+  });
+
+  it('rejects a non-numeric weekly deficit goal', async () => {
+    renderSettings();
+    await screen.findByRole('heading', { name: 'Weekly deficit goal' });
+
+    fireEvent.change(screen.getByLabelText('Weekly deficit goal (kcal)'), {
+      target: { value: 'abc' },
+    });
+    fireEvent.click(screen.getByText('Save weekly goal'));
+
     expect(
-      await screen.findByText('Weekly deficit goal must be a number greater than 0.'),
+      await screen.findByText('Weekly deficit goal must be a number.'),
     ).toBeInTheDocument();
   });
 });

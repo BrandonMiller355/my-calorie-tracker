@@ -54,8 +54,8 @@ export function SettingsScreen() {
       return;
     }
     const goal = Number(trimmed);
-    if (!Number.isFinite(goal) || goal <= 0) {
-      setWeeklyDeficitError('Weekly deficit goal must be a number greater than 0.');
+    if (!Number.isFinite(goal)) {
+      setWeeklyDeficitError('Weekly deficit goal must be a number.');
       return;
     }
     setWeeklyDeficitError(null);
