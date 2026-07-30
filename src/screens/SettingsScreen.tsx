@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { GOAL_FIELDS, goalsToFormValues, parseGoalsForm } from '../lib/goalFields';
+import { checkMacroCalories } from '../lib/macroCheck';
 import { useAppState } from '../state/AppState';
 import { useAuth } from '../state/AuthProvider';
 import { useTheme, type ThemePreference } from '../state/ThemeProvider';
@@ -36,6 +37,21 @@ export function SettingsScreen() {
       return;
     }
     setError(null);
+    const mismatch = checkMacroCalories(
+      result.goals.calories,
+      result.goals.carbs,
+      result.goals.protein,
+      result.goals.fat,
+    );
+    if (
+      mismatch &&
+      !window.confirm(
+        `Your fat, carbs, and protein goals add up to about ${mismatch.expected} kcal, but your ` +
+          `calorie goal is ${mismatch.entered} kcal. Save anyway?`,
+      )
+    ) {
+      return;
+    }
     try {
       await saveDefaultGoals(result.goals);
     } catch {
