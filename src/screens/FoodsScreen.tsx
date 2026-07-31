@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { findFoodByName, matchFoods, normalizeFoodName } from '../lib/foodMatch';
+import { resolveMeal } from '../lib/meal';
 import { MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
   validateFoodForm,
   type FoodFormErrors,
   type FoodFormValues,
 } from '../lib/validation';
+import { MealBuilder, type MealBuilderMode } from '../components/MealBuilder';
 import { useAppState } from '../state/AppState';
-import { DEFAULT_SERVING_LABEL, type LibraryFood } from '../types';
+import { DEFAULT_SERVING_LABEL, type LibraryFood, type SavedMeal } from '../types';
 
 type FormMode = { kind: 'create' } | { kind: 'edit'; food: LibraryFood } | null;
 
@@ -246,12 +248,107 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
   );
 }
 
+function MealsTab({
+  onEdit,
+}: {
+  onEdit: (meal: SavedMeal) => void;
+}) {
+  const { meals, foods, archiveMeal } = useAppState();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [archiveFailed, setArchiveFailed] = useState(false);
+
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleArchive(meal: SavedMeal) {
+    if (!window.confirm(`Archive “${meal.name}”? It disappears from the log search.`)) return;
+    setArchiveFailed(false);
+    archiveMeal(meal.id).catch(() => setArchiveFailed(true));
+  }
+
+  if (meals.length === 0) {
+    return (
+      <p className="search-hint">
+        No meals yet — pick “Select” under Foods to combine foods into a meal.
+      </p>
+    );
+  }
+
+  const sorted = [...meals].sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <>
+      {archiveFailed && (
+        <p className="error-banner" role="alert">
+          Couldn’t archive the meal — it was not removed. Check your connection and try again.
+        </p>
+      )}
+      <ul className="food-list">
+        {sorted.map((meal) => {
+          const { resolved, unavailable, totals } = resolveMeal(meal, foods);
+          const open = expanded.has(meal.id);
+          return (
+            <li key={meal.id} className="food-row">
+              <div className="food-row-main">
+                <span className="result-name">{meal.name}</span>
+                <span className="result-macros">
+                  {totals.calories} kcal · F {totals.fat} g · C {totals.carbs} g · P {totals.protein} g
+                </span>
+                <button type="button" className="link-button" onClick={() => toggle(meal.id)}>
+                  {open ? 'Hide items' : `${resolved.length + unavailable.length} items`}
+                </button>
+                {open && (
+                  <ul className="meal-breakdown">
+                    {resolved.map((r) => (
+                      <li key={r.food.id}>
+                        {r.food.name} · {r.component.amount} {unitLabel(r.component.unit)}
+                      </li>
+                    ))}
+                    {unavailable.length > 0 && (
+                      <li className="meal-breakdown-missing">
+                        {unavailable.length === 1 ? '1 item unavailable' : `${unavailable.length} items unavailable`}
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
+              <div className="food-row-actions">
+                <button type="button" onClick={() => onEdit(meal)}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Archive ${meal.name}`}
+                  onClick={() => handleArchive(meal)}
+                >
+                  Archive
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
 export function FoodsScreen() {
   const { foods, archiveFood } = useAppState();
+  const [tab, setTab] = useState<'foods' | 'meals'>('foods');
   const [form, setForm] = useState<FormMode>(null);
+  const [mealForm, setMealForm] = useState<MealBuilderMode | null>(null);
   const [archiveFailed, setArchiveFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedRecipes, setExpandedRecipes] = useState<Set<string>>(new Set());
+  /** Multi-select mode for combining foods into a meal */
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function toggleRecipe(id: string) {
     setExpandedRecipes((prev) => {
@@ -260,6 +357,20 @@ export function FoodsScreen() {
       else next.add(id);
       return next;
     });
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
   }
 
   const visible =
@@ -279,80 +390,164 @@ export function FoodsScreen() {
     archiveFood(food.id).catch(() => setArchiveFailed(true));
   }
 
+  function createMealFromSelection() {
+    const seed = foods.filter((f) => selected.has(f.id));
+    if (seed.length < 2) return;
+    setMealForm({ kind: 'create', seed });
+    exitSelecting();
+  }
+
   return (
     <div className="foods-screen">
       <h1>Food library</h1>
-      <p className="form-note">
-        Foods you log are saved here automatically. Edits change future logs only — entries
-        already in your history keep the values they were logged with.
-      </p>
 
-      <button type="button" className="add-food-button" onClick={() => setForm({ kind: 'create' })}>
-        + Add food item
-      </button>
+      <div className="library-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'foods'}
+          className={`library-tab${tab === 'foods' ? ' active' : ''}`}
+          onClick={() => {
+            setTab('foods');
+          }}
+        >
+          Foods
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'meals'}
+          className={`library-tab${tab === 'meals' ? ' active' : ''}`}
+          onClick={() => {
+            setTab('meals');
+            exitSelecting();
+          }}
+        >
+          Meals
+        </button>
+      </div>
 
-      {archiveFailed && (
-        <p className="error-banner" role="alert">
-          Couldn’t archive the food — it was not removed. Check your connection and try again.
-        </p>
-      )}
+      {tab === 'foods' ? (
+        <>
+          <p className="form-note">
+            Foods you log are saved here automatically. Edits change future logs only — entries
+            already in your history keep the values they were logged with.
+          </p>
 
-      {foods.length > 0 && (
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Filter your library"
-          aria-label="Filter your library"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      )}
+          <div className="foods-actions">
+            <button type="button" className="add-food-button" onClick={() => setForm({ kind: 'create' })}>
+              + Add food item
+            </button>
+            {foods.length >= 2 && !selecting && (
+              <button
+                type="button"
+                className="new-meal-button"
+                onClick={() => setSelecting(true)}
+              >
+                + New meal
+              </button>
+            )}
+          </div>
 
-      {foods.length === 0 ? (
-        <p className="search-hint">Nothing here yet — foods appear as you log them.</p>
-      ) : visible.length === 0 ? (
-        <p className="search-hint">No foods match “{query.trim()}”.</p>
-      ) : (
-        <ul className="food-list">
-          {visible.map((food) => (
-            <li key={food.id} className="food-row">
-              <div className="food-row-main">
-                <span className="result-name">{food.name}</span>
-                {food.description && <span className="result-brand">{food.description}</span>}
-                <span className="result-macros">
-                  {food.calories} kcal · F {food.fat} g · C {food.carbs} g · P {food.protein} g
-                  {describeAnchor(food) ? ` · ${describeAnchor(food)}` : ''}
-                </span>
-                {food.recipe && (
-                  <>
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => toggleRecipe(food.id)}
-                    >
-                      {expandedRecipes.has(food.id) ? 'Hide recipe' : 'View recipe'}
-                    </button>
-                    {expandedRecipes.has(food.id) && (
-                      <p className="food-recipe">{food.recipe}</p>
+          {selecting && (
+            <div className="select-banner">
+              <p>Tick the foods to combine, then tap “Create meal”.</p>
+              <button type="button" className="link-button" onClick={exitSelecting}>
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {archiveFailed && (
+            <p className="error-banner" role="alert">
+              Couldn’t archive the food — it was not removed. Check your connection and try again.
+            </p>
+          )}
+
+          {foods.length > 0 && (
+            <input
+              className="search-input"
+              type="search"
+              placeholder={selecting ? 'Filter foods to combine' : 'Filter your library'}
+              aria-label="Filter your library"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+
+          {foods.length === 0 ? (
+            <p className="search-hint">Nothing here yet — foods appear as you log them.</p>
+          ) : visible.length === 0 ? (
+            <p className="search-hint">No foods match “{query.trim()}”.</p>
+          ) : (
+            <ul className="food-list">
+              {visible.map((food) => (
+                <li key={food.id} className={`food-row${selecting ? ' selectable' : ''}`}>
+                  {selecting && (
+                    <input
+                      type="checkbox"
+                      className="food-select"
+                      aria-label={`Select ${food.name}`}
+                      checked={selected.has(food.id)}
+                      onChange={() => toggleSelected(food.id)}
+                    />
+                  )}
+                  <div className="food-row-main">
+                    <span className="result-name">{food.name}</span>
+                    {food.description && <span className="result-brand">{food.description}</span>}
+                    <span className="result-macros">
+                      {food.calories} kcal · F {food.fat} g · C {food.carbs} g · P {food.protein} g
+                      {describeAnchor(food) ? ` · ${describeAnchor(food)}` : ''}
+                    </span>
+                    {!selecting && food.recipe && (
+                      <>
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => toggleRecipe(food.id)}
+                        >
+                          {expandedRecipes.has(food.id) ? 'Hide recipe' : 'View recipe'}
+                        </button>
+                        {expandedRecipes.has(food.id) && (
+                          <p className="food-recipe">{food.recipe}</p>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </div>
-              <div className="food-row-actions">
-                <button type="button" onClick={() => setForm({ kind: 'edit', food })}>
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Archive ${food.name}`}
-                  onClick={() => handleArchive(food)}
-                >
-                  Archive
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                  </div>
+                  {!selecting && (
+                    <div className="food-row-actions">
+                      <button type="button" onClick={() => setForm({ kind: 'edit', food })}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Archive ${food.name}`}
+                        onClick={() => handleArchive(food)}
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {selecting && (
+            <div className="select-footer">
+              <button
+                type="button"
+                className="add-food-button"
+                disabled={selected.size < 2}
+                onClick={createMealFromSelection}
+              >
+                Create meal from {selected.size} {selected.size === 1 ? 'food' : 'foods'}
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <MealsTab onEdit={(meal) => setMealForm({ kind: 'edit', meal })} />
       )}
 
       {form && (
@@ -361,6 +556,8 @@ export function FoodsScreen() {
           onClose={() => setForm(null)}
         />
       )}
+
+      {mealForm && <MealBuilder mode={mealForm} onClose={() => setMealForm(null)} />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   type LibraryFood,
   type Meal,
   type MealSuggestions,
+  type SavedMeal,
   type WeekDeficitDay,
 } from './types';
 
@@ -157,6 +158,12 @@ class FakeRepository implements StorageRepository {
     const food = this.foods.get(id);
     if (food) this.foods.set(id, { ...food, archivedAt: new Date().toISOString() });
   }
+  async getMeals(): Promise<SavedMeal[]> {
+    return [];
+  }
+  async addMeal(): Promise<void> {}
+  async updateMeal(): Promise<void> {}
+  async archiveMeal(): Promise<void> {}
   // Mirrors the meal_suggestions() SQL: per-meal grouping, 5 recent then
   // 5 most used, deduped, archived foods excluded.
   async getMealSuggestions(meal: Meal): Promise<MealSuggestions> {

@@ -1,8 +1,15 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { FoodsScreen } from './FoodsScreen';
 import { AppProvider } from '../state/AppState';
 import type { StorageRepository } from '../storage';
-import type { FoodEntry, Goals, LibraryFood, MealSuggestions, WeekDeficitDay } from '../types';
+import type {
+  FoodEntry,
+  Goals,
+  LibraryFood,
+  MealSuggestions,
+  SavedMeal,
+  WeekDeficitDay,
+} from '../types';
 
 const PBJ: LibraryFood = {
   id: 'pbj',
@@ -30,7 +37,13 @@ const OATMEAL: LibraryFood = {
 class FakeRepository implements StorageRepository {
   added: LibraryFood[] = [];
   updated: LibraryFood[] = [];
-  constructor(private foods: LibraryFood[] = []) {}
+  addedMeals: SavedMeal[] = [];
+  updatedMeals: SavedMeal[] = [];
+  archivedMeals: string[] = [];
+  constructor(
+    private foods: LibraryFood[] = [],
+    private meals: SavedMeal[] = [],
+  ) {}
 
   async getEntriesByDate(): Promise<FoodEntry[]> {
     return [];
@@ -57,6 +70,18 @@ class FakeRepository implements StorageRepository {
     this.updated.push(food);
   }
   async archiveFood(): Promise<void> {}
+  async getMeals(): Promise<SavedMeal[]> {
+    return this.meals;
+  }
+  async addMeal(meal: SavedMeal): Promise<void> {
+    this.addedMeals.push(meal);
+  }
+  async updateMeal(meal: SavedMeal): Promise<void> {
+    this.updatedMeals.push(meal);
+  }
+  async archiveMeal(id: string): Promise<void> {
+    this.archivedMeals.push(id);
+  }
   async getMealSuggestions(): Promise<MealSuggestions> {
     return { recent: [], mostUsed: [] };
   }
@@ -72,8 +97,8 @@ class FakeRepository implements StorageRepository {
   async saveWeeklyDeficitGoal(): Promise<void> {}
 }
 
-function renderFoods(foods: LibraryFood[]) {
-  const repository = new FakeRepository(foods);
+function renderFoods(foods: LibraryFood[], meals: SavedMeal[] = []) {
+  const repository = new FakeRepository(foods, meals);
   render(
     <AppProvider repository={repository}>
       <FoodsScreen />
@@ -195,3 +220,142 @@ describe('FoodsScreen save as new food', () => {
     expect(repository.updated).toHaveLength(0);
   });
 });
+
+const TACO_SALAD: SavedMeal = {
+  id: 'taco-salad',
+  name: 'Taco salad',
+  items: [
+    { foodId: 'pbj', amount: 1, unit: 'serving' },
+    { foodId: 'oatmeal', amount: 2, unit: 'serving' },
+  ],
+};
+
+/** Enter multi-select mode and tick the named foods' checkboxes. */
+async function selectFoods(...names: string[]) {
+  fireEvent.click(await screen.findByText('+ New meal'));
+  for (const name of names) {
+    fireEvent.click(screen.getByLabelText(`Select ${name}`));
+  }
+}
+
+describe('FoodsScreen meal builder', () => {
+  it('creates a meal from a multi-selection, seeded at 1 serving each', async () => {
+    const repository = renderFoods([PBJ, OATMEAL]);
+    await selectFoods('PB&J', 'Oatmeal');
+
+    fireEvent.click(screen.getByText('Create meal from 2 foods'));
+    const builder = screen.getByRole('form', { name: 'Create meal' });
+    fireEvent.change(within(builder).getByLabelText('Name'), { target: { value: 'Taco salad' } });
+    fireEvent.click(within(builder).getByText('Save meal'));
+
+    await waitForMeal(repository);
+    expect(repository.addedMeals).toHaveLength(1);
+    expect(repository.addedMeals[0]).toMatchObject({
+      name: 'Taco salad',
+      items: [
+        { foodId: 'pbj', amount: 1, unit: 'serving' },
+        { foodId: 'oatmeal', amount: 1, unit: 'serving' },
+      ],
+    });
+  });
+
+  it('saves an adjusted component portion', async () => {
+    const repository = renderFoods([PBJ, OATMEAL]);
+    await selectFoods('PB&J', 'Oatmeal');
+    fireEvent.click(screen.getByText('Create meal from 2 foods'));
+
+    const builder = screen.getByRole('form', { name: 'Create meal' });
+    fireEvent.change(within(builder).getByLabelText('Name'), { target: { value: 'Combo' } });
+    fireEvent.change(within(builder).getByLabelText('Amount of Oatmeal'), { target: { value: '3' } });
+    fireEvent.click(within(builder).getByText('Save meal'));
+
+    await waitForMeal(repository);
+    expect(repository.addedMeals[0].items).toContainEqual({
+      foodId: 'oatmeal',
+      amount: 3,
+      unit: 'serving',
+    });
+  });
+
+  it('keeps the library filterable while selecting, without losing ticks', async () => {
+    renderFoods([PBJ, OATMEAL]);
+    await selectFoods('PB&J');
+
+    const filter = screen.getByLabelText('Filter your library');
+    fireEvent.change(filter, { target: { value: 'oat' } });
+    // PB&J is filtered out of view but its selection is retained
+    expect(screen.queryByText('PB&J')).not.toBeInTheDocument();
+    expect(screen.getByText('Oatmeal')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Select Oatmeal'));
+    fireEvent.change(filter, { target: { value: '' } });
+    expect(screen.getByText('Create meal from 2 foods')).toBeInTheDocument();
+  });
+
+  it('requires a name before saving', async () => {
+    const repository = renderFoods([PBJ, OATMEAL]);
+    await selectFoods('PB&J', 'Oatmeal');
+    fireEvent.click(screen.getByText('Create meal from 2 foods'));
+
+    const builder = screen.getByRole('form', { name: 'Create meal' });
+    fireEvent.click(within(builder).getByText('Save meal'));
+
+    expect(within(builder).getByText('Name is required')).toBeInTheDocument();
+    expect(repository.addedMeals).toHaveLength(0);
+  });
+
+  it('rejects a meal name already in use', async () => {
+    const repository = renderFoods([PBJ, OATMEAL], [TACO_SALAD]);
+    await selectFoods('PB&J', 'Oatmeal');
+    fireEvent.click(screen.getByText('Create meal from 2 foods'));
+
+    const builder = screen.getByRole('form', { name: 'Create meal' });
+    fireEvent.change(within(builder).getByLabelText('Name'), { target: { value: 'taco salad' } });
+    fireEvent.click(within(builder).getByText('Save meal'));
+
+    expect(within(builder).getAllByText('A meal with this name already exists').length).toBeGreaterThan(0);
+    expect(repository.addedMeals).toHaveLength(0);
+  });
+});
+
+describe('FoodsScreen Meals tab', () => {
+  it('lists meals with a live total and an expandable breakdown', async () => {
+    renderFoods([PBJ, OATMEAL], [TACO_SALAD]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+
+    const row = (await screen.findByText('Taco salad')).closest('.food-row') as HTMLElement;
+    // 1 serving PB&J (300) + 2 servings Oatmeal (300) = 600
+    expect(within(row).getByText(/600 kcal/)).toBeInTheDocument();
+
+    fireEvent.click(within(row).getByText('2 items'));
+    expect(within(row).getByText(/PB&J · 1 serving/)).toBeInTheDocument();
+    expect(within(row).getByText(/Oatmeal · 2 serving/)).toBeInTheDocument();
+  });
+
+  it('notes unavailable components whose food is gone', async () => {
+    // Only PB&J is in the library; the oatmeal component can't resolve
+    renderFoods([PBJ], [TACO_SALAD]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+
+    const row = (await screen.findByText('Taco salad')).closest('.food-row') as HTMLElement;
+    fireEvent.click(within(row).getByText('2 items'));
+    expect(within(row).getByText('1 item unavailable')).toBeInTheDocument();
+  });
+
+  it('archives a meal after confirmation', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const repository = renderFoods([PBJ, OATMEAL], [TACO_SALAD]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+
+    const row = (await screen.findByText('Taco salad')).closest('.food-row') as HTMLElement;
+    fireEvent.click(within(row).getByLabelText('Archive Taco salad'));
+
+    await waitFor(() => expect(repository.archivedMeals).toEqual(['taco-salad']));
+    confirm.mockRestore();
+  });
+});
+
+/** Meal saves are async; wait for the builder's addMeal to land. */
+async function waitForMeal(repository: FakeRepository) {
+  await waitFor(() => expect(repository.addedMeals.length).toBeGreaterThan(0));
+}

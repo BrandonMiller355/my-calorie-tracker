@@ -294,3 +294,34 @@ as $$
   where e.food_id is not null
   group by e.food_id;
 $$;
+
+-- Saved meals: named, reusable groupings of library foods with a portion for
+-- each. `items` holds the components as a JSON array of {foodId, amount, unit}
+-- referencing foods.id; a meal stores no nutrition of its own, so its total is
+-- always computed from the referenced foods' current values. Logging a meal
+-- fans it out into ordinary food_entries and leaves no reference on them.
+-- Run in the dashboard BEFORE deploying app code that reads or writes meals.
+create table saved_meals (
+  id uuid primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null,
+  items jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  -- Archived meals are hidden from the name search but never deleted.
+  archived_at timestamptz
+);
+
+-- Dedup key: a meal name is unique per user (case-insensitive, trimmed), the
+-- same rule the foods table uses. A meal MAY share a name with a food.
+create unique index saved_meals_user_name on saved_meals (user_id, lower(trim(name)));
+
+alter table saved_meals enable row level security;
+
+create policy "own meals select" on saved_meals
+  for select using (user_id = auth.uid());
+create policy "own meals insert" on saved_meals
+  for insert with check (user_id = auth.uid());
+create policy "own meals update" on saved_meals
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own meals delete" on saved_meals
+  for delete using (user_id = auth.uid());

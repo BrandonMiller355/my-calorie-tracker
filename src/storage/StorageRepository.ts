@@ -5,6 +5,7 @@ import type {
   LibraryFood,
   Meal,
   MealSuggestions,
+  SavedMeal,
   WeekDeficitDay,
 } from '../types';
 
@@ -39,6 +40,12 @@ export interface StorageRepository {
   updateFood(food: LibraryFood): Promise<void>;
   /** Hides the food from suggestions and search; never deletes the row. */
   archiveFood(id: string): Promise<void>;
+  /** The user's saved meals, excluding archived ones. */
+  getMeals(): Promise<SavedMeal[]>;
+  addMeal(meal: SavedMeal): Promise<void>;
+  updateMeal(meal: SavedMeal): Promise<void>;
+  /** Hides the meal from the entry-form name search; never deletes the row. */
+  archiveMeal(id: string): Promise<void>;
   /** Recent and most-used foods for a meal, computed server-side. */
   getMealSuggestions(meal: Meal): Promise<MealSuggestions>;
   /**

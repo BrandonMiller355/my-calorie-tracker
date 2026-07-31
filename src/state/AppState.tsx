@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { startOfWeek, todayKey } from '../lib/date';
 import { findFoodByName } from '../lib/foodMatch';
+import { resolveMeal } from '../lib/meal';
 import { computeWeeklyDeficit } from '../lib/weeklyDeficit';
 import type { StorageRepository } from '../storage';
 import {
@@ -20,6 +21,7 @@ import {
   type LibraryFood,
   type Meal,
   type MealSuggestions,
+  type SavedMeal,
   type WeekDeficitDay,
 } from '../types';
 
@@ -37,6 +39,8 @@ interface AppState {
   dayGoalOverride: DayGoalOverride | null;
   /** Non-archived food library, loaded once per session */
   foods: LibraryFood[];
+  /** Non-archived saved meals, loaded once per session */
+  meals: SavedMeal[];
   /**
    * Food id → local date (YYYY-MM-DD) it was last logged, for recency-first
    * name search. Loaded once per session, then kept fresh as entries save.
@@ -67,6 +71,10 @@ type Action =
   | { type: 'food-added'; food: LibraryFood }
   | { type: 'food-updated'; food: LibraryFood }
   | { type: 'food-archived'; id: string }
+  | { type: 'meals-loaded'; meals: SavedMeal[] }
+  | { type: 'meal-added'; meal: SavedMeal }
+  | { type: 'meal-updated'; meal: SavedMeal }
+  | { type: 'meal-archived'; id: string }
   | { type: 'weekly-deficit-goal-loaded'; goal: number | null }
   | { type: 'weekly-deficit-goal-saved'; goal: number }
   | { type: 'week-summary-loaded'; date: string; days: WeekDeficitDay[] }
@@ -143,6 +151,17 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'food-archived':
       return { ...state, foods: state.foods.filter((f) => f.id !== action.id) };
+    case 'meals-loaded':
+      return { ...state, meals: action.meals };
+    case 'meal-added':
+      return { ...state, meals: [...state.meals, action.meal] };
+    case 'meal-updated':
+      return {
+        ...state,
+        meals: state.meals.map((m) => (m.id === action.meal.id ? action.meal : m)),
+      };
+    case 'meal-archived':
+      return { ...state, meals: state.meals.filter((m) => m.id !== action.id) };
     case 'weekly-deficit-goal-loaded':
       return { ...state, weeklyDeficitGoal: action.goal };
     case 'weekly-deficit-goal-saved':
@@ -197,6 +216,15 @@ export interface AppContextValue extends AppState {
   addFood: (food: Omit<LibraryFood, 'id'>) => Promise<void>;
   updateFood: (food: LibraryFood) => Promise<void>;
   archiveFood: (id: string) => Promise<void>;
+  addMeal: (meal: Omit<SavedMeal, 'id'>) => Promise<void>;
+  updateMeal: (meal: SavedMeal) => Promise<void>;
+  archiveMeal: (id: string) => Promise<void>;
+  /**
+   * Fans a saved meal out into one ordinary entry per available component,
+   * logged to the given slot and date. Components whose food no longer resolves
+   * are skipped; resolves to the number of entries actually created.
+   */
+  logMeal: (mealId: string, meal: Meal, date: string) => Promise<number>;
   getMealSuggestions: (meal: Meal) => Promise<MealSuggestions>;
   saveWeeklyDeficitGoal: (goal: number) => Promise<void>;
 }
@@ -218,6 +246,7 @@ export function AppProvider({
     goalsAreDefault: true,
     dayGoalOverride: null,
     foods: [],
+    meals: [],
     foodLastUsed: {},
     loadFailed: false,
     weeklyDeficitGoal: null,
@@ -308,6 +337,21 @@ export function AppProvider({
     repository.getFoods().then(
       (foods) => {
         if (!cancelled) dispatch({ type: 'foods-loaded', foods });
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [repository, reloadKey]);
+
+  // Saved meals only power the meal-log path and the library's Meals view, so
+  // like foods a failed load degrades silently rather than blocking the app.
+  useEffect(() => {
+    let cancelled = false;
+    repository.getMeals().then(
+      (meals) => {
+        if (!cancelled) dispatch({ type: 'meals-loaded', meals });
       },
       () => {},
     );
@@ -454,6 +498,64 @@ export function AppProvider({
     [repository],
   );
 
+  const addMeal = useCallback(
+    async (input: Omit<SavedMeal, 'id'>) => {
+      const meal: SavedMeal = { ...input, id: crypto.randomUUID() };
+      await repository.addMeal(meal);
+      dispatch({ type: 'meal-added', meal });
+    },
+    [repository],
+  );
+
+  const updateMeal = useCallback(
+    async (meal: SavedMeal) => {
+      await repository.updateMeal(meal);
+      dispatch({ type: 'meal-updated', meal });
+    },
+    [repository],
+  );
+
+  const archiveMeal = useCallback(
+    async (id: string) => {
+      await repository.archiveMeal(id);
+      dispatch({ type: 'meal-archived', id });
+    },
+    [repository],
+  );
+
+  const logMeal = useCallback(
+    async (mealId: string, meal: Meal, date: string) => {
+      const savedMeal = state.meals.find((m) => m.id === mealId);
+      if (!savedMeal) return 0;
+      // Resolve against the current library so archived/removed components (and
+      // portions the food's anchor no longer offers) are skipped, not logged.
+      const { resolved } = resolveMeal(savedMeal, state.foods);
+      for (const component of resolved) {
+        const { food, quantity } = component;
+        // Same shape any single food log produces: per-serving nutrition + the
+        // food's anchor snapshot, scaled at read time by the derived quantity.
+        await addEntry({
+          date,
+          meal,
+          name: food.name,
+          amount: component.component.amount,
+          unit: component.component.unit,
+          servingLabel: food.servingLabel,
+          servingSize: food.servingSize,
+          quantity,
+          calories: food.calories,
+          carbs: food.carbs,
+          protein: food.protein,
+          fat: food.fat,
+          source: 'manual',
+          foodId: food.id,
+        });
+      }
+      return resolved.length;
+    },
+    [state.meals, state.foods, addEntry],
+  );
+
   const getMealSuggestions = useCallback(
     (meal: Meal) => repository.getMealSuggestions(meal),
     [repository],
@@ -503,6 +605,10 @@ export function AppProvider({
       addFood,
       updateFood,
       archiveFood,
+      addMeal,
+      updateMeal,
+      archiveMeal,
+      logMeal,
       getMealSuggestions,
       saveWeeklyDeficitGoal,
     }),
@@ -523,6 +629,10 @@ export function AppProvider({
       addFood,
       updateFood,
       archiveFood,
+      addMeal,
+      updateMeal,
+      archiveMeal,
+      logMeal,
       getMealSuggestions,
       saveWeeklyDeficitGoal,
     ],

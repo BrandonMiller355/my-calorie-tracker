@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
-import type { LibraryFood } from '../types';
+import type { LibraryFood, SavedMeal } from '../types';
 
 export interface ComboboxGroup {
   label: string;
@@ -19,14 +19,20 @@ export interface FoodNameComboboxProps {
   onChange: (value: string) => void;
   /** Suggestion groups when the input is empty, library matches when typing */
   groups: ComboboxGroup[];
+  /** Saved meals matching the typed text; selecting one fans out via the sheet */
+  meals?: SavedMeal[];
   /** Fixed footer rows, e.g. search online / use as new food */
   actions: ComboboxAction[];
   onSelectFood: (food: LibraryFood) => void;
+  onSelectMeal?: (meal: SavedMeal) => void;
   /** Focus the input on mount (opens the dropdown and, on mobile, the keyboard) */
   autoFocus?: boolean;
 }
 
-type Option = { kind: 'food'; food: LibraryFood } | { kind: 'action'; action: ComboboxAction };
+type Option =
+  | { kind: 'food'; food: LibraryFood }
+  | { kind: 'meal'; meal: SavedMeal }
+  | { kind: 'action'; action: ComboboxAction };
 
 /**
  * Minimal ARIA combobox for the entry form's Name field. Free text is always
@@ -37,8 +43,10 @@ export function FoodNameCombobox({
   value,
   onChange,
   groups,
+  meals = [],
   actions,
   onSelectFood,
+  onSelectMeal,
   autoFocus = true,
 }: FoodNameComboboxProps) {
   const [open, setOpen] = useState(false);
@@ -46,8 +54,11 @@ export function FoodNameCombobox({
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Flattened order (foods, then meals, then actions) mirrors the render order,
+  // so keyboard nav and aria-activedescendant stay in sync.
   const options: Option[] = [
     ...groups.flatMap((g) => g.foods.map((food): Option => ({ kind: 'food', food }))),
+    ...meals.map((meal): Option => ({ kind: 'meal', meal })),
     ...actions.map((action): Option => ({ kind: 'action', action })),
   ];
   const expanded = open && options.length > 0;
@@ -59,6 +70,7 @@ export function FoodNameCombobox({
 
   function select(option: Option) {
     if (option.kind === 'food') onSelectFood(option.food);
+    else if (option.kind === 'meal') onSelectMeal?.(option.meal);
     else option.action.onSelect();
     close();
   }
@@ -98,12 +110,19 @@ export function FoodNameCombobox({
   let optionIndex = -1;
   const optionId = (i: number) => `${listId}-option-${i}`;
 
+  const optionKey = (option: Option) =>
+    option.kind === 'food'
+      ? option.food.id
+      : option.kind === 'meal'
+        ? option.meal.id
+        : option.action.id;
+
   function renderOption(option: Option) {
     optionIndex += 1;
     const i = optionIndex;
     return (
       <li
-        key={option.kind === 'food' ? option.food.id : option.action.id}
+        key={optionKey(option)}
         id={optionId(i)}
         role="option"
         aria-selected={i === activeIndex}
@@ -132,6 +151,11 @@ export function FoodNameCombobox({
               <span className="combobox-option-desc">{option.food.description}</span>
             )}
           </>
+        ) : option.kind === 'meal' ? (
+          <span className="combobox-option-name">
+            {option.meal.name}
+            <span className="combobox-meal-badge">Meal</span>
+          </span>
         ) : (
           option.action.label
         )}
@@ -188,6 +212,12 @@ export function FoodNameCombobox({
                 <ul role="presentation">{group.foods.map((food) => renderOption({ kind: 'food', food }))}</ul>
               </li>
             ))}
+          {meals.length > 0 && (
+            <li role="presentation">
+              <span className="combobox-group-label">Meals</span>
+              <ul role="presentation">{meals.map((meal) => renderOption({ kind: 'meal', meal }))}</ul>
+            </li>
+          )}
           {actions.map((action) => renderOption({ kind: 'action', action }))}
         </ul>
       )}

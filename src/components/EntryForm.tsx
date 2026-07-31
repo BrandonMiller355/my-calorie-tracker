@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IdentifiedAmount } from '../api/identifyFood';
 import { checkMacroCalories } from '../lib/macroCheck';
-import { findFoodByName, matchFoods } from '../lib/foodMatch';
+import { findFoodByName, matchFoods, matchMeals } from '../lib/foodMatch';
 import { availableUnits, deriveQuantity, MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
   validateEntryForm,
@@ -22,6 +22,7 @@ import {
   type LibraryFood,
   type Meal,
   type MealSuggestions,
+  type SavedMeal,
   type ServingAnchor,
 } from '../types';
 import type { ResolvedTextLogItem } from '../api/logFromText';
@@ -29,6 +30,7 @@ import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
 import { BulkPhotoOverlay } from './BulkPhotoOverlay';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
 import { IdentifyOverlay } from './IdentifyOverlay';
+import { LogMealSheet } from './LogMealSheet';
 import { TextLogOverlay } from './TextLogOverlay';
 
 export interface EntryFormProps {
@@ -122,7 +124,7 @@ function ServingAnchorFields({
 }
 
 export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: EntryFormProps) {
-  const { addEntry, updateEntry, updateFood, foods, foodLastUsed, getMealSuggestions } =
+  const { addEntry, updateEntry, updateFood, foods, meals, foodLastUsed, getMealSuggestions } =
     useAppState();
   const navigate = useNavigate();
   const nameInputId = useId();
@@ -176,6 +178,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const [textLogging, setTextLogging] = useState(false);
   /** Bulk-photos overlay is open */
   const [bulkLogging, setBulkLogging] = useState(false);
+  /** Saved meal selected from the picker, awaiting confirm-and-fan-out */
+  const [loggingMeal, setLoggingMeal] = useState<SavedMeal | null>(null);
   /** Photo + note handed from identify's no-match to the AI estimate flow */
   const [estimateHandoff, setEstimateHandoff] = useState<{ image: string; note: string } | null>(
     null,
@@ -304,6 +308,10 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   } else if (!saving && query !== '') {
     groups = [{ label: 'My foods', foods: matchFoods(foods, query, foodLastUsed) }];
   }
+
+  // Saved meals surface by name match only (never in the empty-field
+  // suggestions); state.meals already excludes archived meals.
+  const mealMatches = !saving && query !== '' ? matchMeals(meals, query) : [];
 
   const actions: ComboboxAction[] = saving
     ? []
@@ -614,8 +622,10 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
               setFoodId(undefined);
             }}
             groups={groups}
+            meals={mealMatches}
             actions={actions}
             onSelectFood={selectFood}
+            onSelectMeal={setLoggingMeal}
             // A prefilled or edited name is settled; don't pop the dropdown
             // and mobile keyboard until the user taps the field themselves
             autoFocus={!editing && !prefill}
@@ -668,8 +678,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           </>
         )}
 
-        <fieldset className="segmented-field" aria-label="Meal">
-          <legend>Meal</legend>
+        <fieldset className="segmented-field" aria-label="When">
+          <legend>When</legend>
           <div className="segmented">
             {MEALS.map((m) => (
               <label key={m} className={`segment${meal === m ? ' segment-active' : ''}`}>
@@ -871,6 +881,16 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           meal={meal}
           onLogged={onClose}
           onCancel={() => setBulkLogging(false)}
+        />
+      )}
+
+      {loggingMeal && (
+        <LogMealSheet
+          meal={loggingMeal}
+          date={date}
+          defaultSlot={meal}
+          onLogged={onClose}
+          onCancel={() => setLoggingMeal(null)}
         />
       )}
 

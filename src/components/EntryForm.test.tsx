@@ -9,6 +9,7 @@ import type {
   Goals,
   LibraryFood,
   MealSuggestions,
+  SavedMeal,
   WeekDeficitDay,
 } from '../types';
 import type { IdentifiedAmount } from '../api/identifyFood';
@@ -171,6 +172,7 @@ class FakeRepository implements StorageRepository {
   updateFoodCalls: unknown[] = [];
   addFoodCalls: unknown[] = [];
   library: LibraryFood[] = [CHICKEN, COOKIE];
+  meals: SavedMeal[] = [];
   lastUsed: Record<string, string> = {};
 
   async getEntriesByDate(): Promise<FoodEntry[]> {
@@ -202,6 +204,12 @@ class FakeRepository implements StorageRepository {
     this.updateFoodCalls.push(food);
   }
   async archiveFood(): Promise<void> {}
+  async getMeals(): Promise<SavedMeal[]> {
+    return this.meals;
+  }
+  async addMeal(): Promise<void> {}
+  async updateMeal(): Promise<void> {}
+  async archiveMeal(): Promise<void> {}
   async getMealSuggestions(): Promise<MealSuggestions> {
     return { recent: [], mostUsed: [] };
   }
@@ -681,5 +689,96 @@ describe('EntryForm quick calories mode', () => {
     });
     expect(repository.addFoodCalls).toHaveLength(0);
     expect(repository.updateFoodCalls).toHaveLength(0);
+  });
+});
+
+const TACO_SALAD: SavedMeal = {
+  id: 'meal-taco',
+  name: 'Taco salad',
+  items: [
+    { foodId: 'food-chicken', amount: 1, unit: 'serving' },
+    { foodId: 'food-cookie', amount: 1, unit: 'cookie' },
+  ],
+};
+
+/** Renders the form with the given library + saved meals seeded on the repo. */
+async function renderWithMeals(library: LibraryFood[], meals: SavedMeal[], onClose = vi.fn()) {
+  const repository = new FakeRepository();
+  repository.library = library;
+  repository.meals = meals;
+  await renderForm({ repository, onClose });
+  return repository;
+}
+
+describe('EntryForm meal logging', () => {
+  it('matches a saved meal by name and marks it with a badge', async () => {
+    await renderWithMeals([CHICKEN, COOKIE], [TACO_SALAD]);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'taco' } });
+    const option = within(screen.getByRole('listbox'))
+      .getAllByRole('option')
+      .find((o) => o.textContent?.includes('Taco salad'))!;
+    expect(option).toBeTruthy();
+    expect(within(option).getByText('Meal')).toBeInTheDocument();
+  });
+
+  it('opens the confirm sheet without pre-filling the form when a meal is picked', async () => {
+    await renderWithMeals([CHICKEN, COOKIE], [TACO_SALAD]);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'taco' } });
+    fireEvent.click(screen.getByText('Taco salad'));
+
+    expect(screen.getByRole('dialog', { name: 'Log Taco salad' })).toBeInTheDocument();
+    // The entry form fields are untouched — no prefill from a meal
+    expect(screen.getByLabelText('Name')).toHaveValue('taco');
+  });
+
+  it('fans the meal out into one entry per component in the chosen slot', async () => {
+    const onClose = vi.fn();
+    const repository = await renderWithMeals([CHICKEN, COOKIE], [TACO_SALAD], onClose);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'taco' } });
+    fireEvent.click(screen.getByText('Taco salad'));
+
+    const sheet = screen.getByRole('dialog', { name: 'Log Taco salad' });
+    // Retarget the fan-out to lunch before confirming
+    fireEvent.click(within(sheet).getByLabelText('Lunch'));
+    fireEvent.click(within(sheet).getByText('Log all'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addEntryCalls).toHaveLength(2);
+    expect(repository.addEntryCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ foodId: 'food-chicken', meal: 'lunch', calories: 165, quantity: 1 }),
+        expect.objectContaining({ foodId: 'food-cookie', meal: 'lunch', calories: 220, quantity: 1 }),
+      ]),
+    );
+  });
+
+  it('skips an unavailable component and notes it on the sheet', async () => {
+    // Only the chicken resolves; the cookie component is gone
+    const repository = await renderWithMeals([CHICKEN], [TACO_SALAD]);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'taco' } });
+    fireEvent.click(screen.getByText('Taco salad'));
+
+    const sheet = screen.getByRole('dialog', { name: 'Log Taco salad' });
+    expect(within(sheet).getByText('1 item unavailable and will be skipped')).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByText('Log all'));
+
+    await waitFor(() => expect(repository.addEntryCalls).toHaveLength(1));
+    expect(repository.addEntryCalls[0]).toMatchObject({ foodId: 'food-chicken' });
+  });
+
+  it('blocks logging when every component is unavailable', async () => {
+    const repository = await renderWithMeals([], [TACO_SALAD]);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'taco' } });
+    fireEvent.click(screen.getByText('Taco salad'));
+
+    const sheet = screen.getByRole('dialog', { name: 'Log Taco salad' });
+    expect(within(sheet).getByText(/nothing to log/i)).toBeInTheDocument();
+    expect(within(sheet).getByText('Log all')).toBeDisabled();
+    expect(repository.addEntryCalls).toHaveLength(0);
   });
 });

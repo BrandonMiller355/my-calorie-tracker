@@ -8,6 +8,7 @@ import type {
   Goals,
   LibraryFood,
   MealSuggestions,
+  SavedMeal,
   WeekDeficitDay,
 } from '../types';
 import type { TextLogItem } from '../api/logFromText';
@@ -97,6 +98,12 @@ class FakeRepository implements StorageRepository {
   }
   async updateFood(): Promise<void> {}
   async archiveFood(): Promise<void> {}
+  async getMeals(): Promise<SavedMeal[]> {
+    return [];
+  }
+  async addMeal(): Promise<void> {}
+  async updateMeal(): Promise<void> {}
+  async archiveMeal(): Promise<void> {}
   async getMealSuggestions(): Promise<MealSuggestions> {
     return { recent: [], mostUsed: [] };
   }

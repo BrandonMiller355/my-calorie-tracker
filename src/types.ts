@@ -72,6 +72,35 @@ export interface LibraryFood extends ServingAnchor {
   archivedAt?: string;
 }
 
+/**
+ * One component of a saved meal: a reference to a library food plus the
+ * portion to log. Nutrition is never stored here — it is read from the
+ * referenced library food at view/log time, so a meal always reflects its
+ * components' current values.
+ */
+export interface MealComponent {
+  foodId: string;
+  /** What to log of this food, e.g. 100 */
+  amount: number;
+  /** A MeasureUnit or the referenced food's serving label */
+  unit: string;
+}
+
+/**
+ * A named, reusable grouping of library foods with a portion for each. Shown
+ * as a "Meal" in the UI, but named `SavedMeal` in code to avoid colliding with
+ * the `Meal` slot type (breakfast/lunch/dinner/snacks) above. Stores references
+ * only and no nutrition of its own; logging one fans it out into ordinary food
+ * entries, one per component.
+ */
+export interface SavedMeal {
+  id: string;
+  name: string;
+  items: MealComponent[];
+  /** ISO timestamp; archived meals are hidden from the entry-form name search */
+  archivedAt?: string;
+}
+
 /** Per-meal picker suggestions; groups never repeat a food. */
 export interface MealSuggestions {
   recent: LibraryFood[];

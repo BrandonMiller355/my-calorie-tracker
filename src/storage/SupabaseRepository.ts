@@ -6,8 +6,10 @@ import {
   type Goals,
   type LibraryFood,
   type Meal,
+  type MealComponent,
   type MealSuggestions,
   type MeasureUnit,
+  type SavedMeal,
   type ServingAnchor,
   type WeekDeficitDay,
 } from '../types';
@@ -140,6 +142,25 @@ function fromFoodRow(row: FoodRow): LibraryFood {
 }
 
 /**
+ * Row shape of the saved_meals table. Components are stored as an opaque JSON
+ * array in the `items` column, so they round-trip in their app-side camelCase
+ * shape without a per-key mapping.
+ */
+interface SavedMealRow {
+  id: string;
+  name: string;
+  items: MealComponent[];
+}
+
+function toMealRow(meal: SavedMeal): SavedMealRow {
+  return { id: meal.id, name: meal.name, items: meal.items };
+}
+
+function fromMealRow(row: SavedMealRow): SavedMeal {
+  return { id: row.id, name: row.name, items: row.items };
+}
+
+/**
  * Persistence against Supabase Postgres. Rows are scoped to the signed-in
  * user by RLS, and user_id is filled in server-side (default auth.uid()),
  * so no user filtering happens client-side.
@@ -230,6 +251,34 @@ export class SupabaseRepository implements StorageRepository {
       .update({ archived_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw new Error(`Archiving food failed: ${error.message}`);
+  }
+
+  async getMeals(): Promise<SavedMeal[]> {
+    const { data, error } = await this.client
+      .from('saved_meals')
+      .select('id, name, items')
+      .is('archived_at', null);
+    if (error) throw new Error(`Loading meals failed: ${error.message}`);
+    return ((data ?? []) as SavedMealRow[]).map(fromMealRow);
+  }
+
+  async addMeal(meal: SavedMeal): Promise<void> {
+    const { error } = await this.client.from('saved_meals').insert(toMealRow(meal));
+    if (error) throw new Error(`Saving meal failed: ${error.message}`);
+  }
+
+  async updateMeal(meal: SavedMeal): Promise<void> {
+    const { id, ...row } = toMealRow(meal);
+    const { error } = await this.client.from('saved_meals').update(row).eq('id', id);
+    if (error) throw new Error(`Updating meal failed: ${error.message}`);
+  }
+
+  async archiveMeal(id: string): Promise<void> {
+    const { error } = await this.client
+      .from('saved_meals')
+      .update({ archived_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(`Archiving meal failed: ${error.message}`);
   }
 
   async getMealSuggestions(meal: Meal): Promise<MealSuggestions> {

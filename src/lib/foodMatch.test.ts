@@ -1,5 +1,5 @@
-import { findFoodByName, matchFoods, normalizeFoodName } from './foodMatch';
-import type { LibraryFood } from '../types';
+import { findFoodByName, findMealByName, matchFoods, matchMeals, normalizeFoodName } from './foodMatch';
+import type { LibraryFood, SavedMeal } from '../types';
 
 function food(id: string, name: string, description?: string): LibraryFood {
   return {
@@ -96,5 +96,38 @@ describe('matchFoods', () => {
   it('sorts never-used foods after used ones, alphabetically', () => {
     const lastUsed = { '2': '2026-07-19' };
     expect(matchFoods(library, 'chick', lastUsed).map((f) => f.id)).toEqual(['2', '1', '5']);
+  });
+});
+
+function meal(id: string, name: string): SavedMeal {
+  return { id, name, items: [{ foodId: 'f1', amount: 1, unit: 'serving' }] };
+}
+
+describe('findMealByName', () => {
+  it('matches on the normalized name', () => {
+    const target = meal('1', 'Taco Salad');
+    expect(findMealByName([meal('2', 'Oats'), target], ' taco salad ')).toBe(target);
+  });
+
+  it('returns undefined when nothing matches', () => {
+    expect(findMealByName([meal('1', 'Oats')], 'taco salad')).toBeUndefined();
+  });
+});
+
+describe('matchMeals', () => {
+  const meals = [meal('1', 'Taco salad'), meal('2', 'Taco bowl'), meal('3', 'Protein oats')];
+
+  it('matches meal names case-insensitively', () => {
+    expect(matchMeals(meals, 'TACO').map((m) => m.id)).toEqual(['2', '1']);
+  });
+
+  it('ranks word-boundary matches above substring, then alphabetical', () => {
+    const withSubstring = [...meals, meal('4', 'Fajita night')];
+    // 'ta' starts a word in "Taco …" (rank 0) but is mid-word in "fajiTA" (rank 1)
+    expect(matchMeals(withSubstring, 'ta').map((m) => m.id)).toEqual(['2', '1', '4']);
+  });
+
+  it('returns nothing for a blank query', () => {
+    expect(matchMeals(meals, '  ')).toEqual([]);
   });
 });

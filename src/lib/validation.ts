@@ -1,4 +1,4 @@
-import { DEFAULT_SERVING_LABEL, type ServingAnchor } from '../types';
+import { DEFAULT_SERVING_LABEL, type LibraryFood, type ServingAnchor } from '../types';
 import { availableUnits, isMeasureUnit } from './units';
 
 export interface EntryFormValues {
@@ -151,6 +151,85 @@ export function validateFoodForm(
       fat: nutrients.fat as number,
     },
   };
+}
+
+/** One row of the meal builder: a chosen food plus its portion as form text. */
+export interface MealComponentFormValue {
+  food: LibraryFood;
+  amount: string;
+  unit: string;
+}
+
+export interface MealFormValues {
+  name: string;
+  components: MealComponentFormValue[];
+}
+
+export interface MealComponentError {
+  amount?: string;
+  unit?: string;
+}
+
+export interface MealFormErrors {
+  name?: string;
+  /** Structural problem with the component list as a whole (e.g. none left) */
+  components?: string;
+  /** Per-row errors, keyed by the component's index in the form */
+  componentErrors?: Record<number, MealComponentError>;
+}
+
+export interface ParsedMeal {
+  name: string;
+  items: { foodId: string; amount: number; unit: string }[];
+}
+
+/**
+ * A meal needs a name, at least one component, and every component's amount and
+ * unit valid against that food's serving anchor. Name-uniqueness against the
+ * existing meals is enforced by the caller (it has the meal list), matching how
+ * the food form checks library duplicates.
+ */
+export function validateMealForm(
+  values: MealFormValues,
+): { ok: true; parsed: ParsedMeal } | { ok: false; errors: MealFormErrors } {
+  const errors: MealFormErrors = {};
+
+  const name = values.name.trim();
+  if (!name) errors.name = 'Name is required';
+
+  if (values.components.length === 0) {
+    errors.components = 'Add at least one food';
+  }
+
+  const componentErrors: Record<number, MealComponentError> = {};
+  const items: ParsedMeal['items'] = [];
+  values.components.forEach((component, index) => {
+    const rowErrors: MealComponentError = {};
+    const amount = parseNonNegative(component.amount);
+    if (amount === null || amount <= 0) {
+      rowErrors.amount = 'Amount must be a number greater than 0';
+    }
+    const anchor: ServingAnchor = {
+      servingLabel: component.food.servingLabel,
+      servingSize: component.food.servingSize,
+    };
+    if (!availableUnits(anchor).includes(component.unit)) {
+      rowErrors.unit = 'Pick a unit';
+    }
+    if (Object.keys(rowErrors).length > 0) {
+      componentErrors[index] = rowErrors;
+    } else {
+      items.push({ foodId: component.food.id, amount: amount as number, unit: component.unit });
+    }
+  });
+
+  if (Object.keys(componentErrors).length > 0) errors.componentErrors = componentErrors;
+
+  if (errors.name || errors.components || errors.componentErrors) {
+    return { ok: false, errors };
+  }
+
+  return { ok: true, parsed: { name, items } };
 }
 
 export function validateEntryForm(

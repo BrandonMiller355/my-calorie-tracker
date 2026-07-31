@@ -1,4 +1,4 @@
-import type { LibraryFood } from '../types';
+import type { LibraryFood, SavedMeal } from '../types';
 
 /** The library dedup key: matches the DB unique index on lower(trim(name)). */
 export function normalizeFoodName(name: string): string {
@@ -65,4 +65,26 @@ export function matchFoods(
         a.r - b.r || b.used.localeCompare(a.used) || a.food.name.localeCompare(b.food.name),
     )
     .map(({ food }) => food);
+}
+
+export function findMealByName(meals: SavedMeal[], name: string): SavedMeal | undefined {
+  const normalized = normalizeFoodName(name);
+  return meals.find((m) => normalizeFoodName(m.name) === normalized);
+}
+
+/**
+ * Case-insensitive, token-based match over saved meal names only (meals have no
+ * description). Ranking mirrors `matchFoods` — word-boundary matches first —
+ * then alphabetical, since meals carry no usage recency.
+ */
+export function matchMeals(meals: SavedMeal[], query: string): SavedMeal[] {
+  const tokens = tokenize(query);
+  if (tokens.length === 0) return [];
+  return meals
+    .flatMap((meal) => {
+      const r = fieldRank(meal.name.toLowerCase(), tokens);
+      return r === null ? [] : [{ meal, r }];
+    })
+    .sort((a, b) => a.r - b.r || a.meal.name.localeCompare(b.meal.name))
+    .map(({ meal }) => meal);
 }

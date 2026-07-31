@@ -1,8 +1,10 @@
-import type { ServingAnchor } from '../types';
+import type { LibraryFood, ServingAnchor } from '../types';
 import {
   validateEntryForm,
+  validateMealForm,
   validateServingAnchor,
   type EntryFormValues,
+  type MealComponentFormValue,
   type ServingAnchorFormValues,
 } from './validation';
 
@@ -150,5 +152,78 @@ describe('validateServingAnchor', () => {
     );
     expect(zero.ok).toBe(false);
     if (!zero.ok) expect(zero.errors.servingSizeAmount).toBeTruthy();
+  });
+});
+
+describe('validateMealForm', () => {
+  const beans: LibraryFood = {
+    id: 'beans',
+    name: 'Beans',
+    servingLabel: 'can',
+    servingSize: { amount: 400, unit: 'g' },
+    calories: 320,
+    carbs: 40,
+    protein: 20,
+    fat: 2,
+    source: 'manual',
+  };
+  const lettuce: LibraryFood = {
+    id: 'lettuce',
+    name: 'Lettuce',
+    servingLabel: 'cup',
+    calories: 5,
+    carbs: 1,
+    protein: 0,
+    fat: 0,
+    source: 'manual',
+  };
+
+  function component(overrides: Partial<MealComponentFormValue> = {}): MealComponentFormValue {
+    return { food: beans, amount: '1', unit: 'can', ...overrides };
+  }
+
+  it('parses a valid meal into foodId/amount/unit items', () => {
+    const result = validateMealForm({
+      name: '  Taco salad ',
+      components: [component(), component({ food: lettuce, amount: '2', unit: 'cup' })],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.parsed).toEqual({
+        name: 'Taco salad',
+        items: [
+          { foodId: 'beans', amount: 1, unit: 'can' },
+          { foodId: 'lettuce', amount: 2, unit: 'cup' },
+        ],
+      });
+    }
+  });
+
+  it('requires a name', () => {
+    const result = validateMealForm({ name: '  ', components: [component()] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.name).toBeTruthy();
+  });
+
+  it('requires at least one component', () => {
+    const result = validateMealForm({ name: 'Empty', components: [] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.components).toBeTruthy();
+  });
+
+  it('rejects a component with a non-positive amount', () => {
+    const result = validateMealForm({ name: 'Taco', components: [component({ amount: '0' })] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.componentErrors?.[0]?.amount).toBeTruthy();
+  });
+
+  it('rejects a component whose unit the food anchor does not offer', () => {
+    // Lettuce is count-only, so "g" is not a valid unit for it
+    const result = validateMealForm({
+      name: 'Taco',
+      components: [component({ food: lettuce, unit: 'g' })],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.componentErrors?.[0]?.unit).toBeTruthy();
   });
 });

@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseRepository } from './SupabaseRepository';
-import { DEFAULT_GOALS, type FoodEntry, type Goals, type LibraryFood } from '../types';
+import {
+  DEFAULT_GOALS,
+  type FoodEntry,
+  type Goals,
+  type LibraryFood,
+  type SavedMeal,
+} from '../types';
 
 interface Call {
   method: string;
@@ -106,6 +112,24 @@ const foodRow = {
   protein: 14,
   fat: 12,
   source: 'manual',
+};
+
+const savedMeal: SavedMeal = {
+  id: 'meal-1',
+  name: 'Taco salad',
+  items: [
+    { foodId: 'food-1', amount: 0.5, unit: 'can' },
+    { foodId: 'food-2', amount: 100, unit: 'g' },
+  ],
+};
+
+const savedMealRow = {
+  id: 'meal-1',
+  name: 'Taco salad',
+  items: [
+    { foodId: 'food-1', amount: 0.5, unit: 'can' },
+    { foodId: 'food-2', amount: 100, unit: 'g' },
+  ],
 };
 
 describe('SupabaseRepository', () => {
@@ -301,6 +325,51 @@ describe('SupabaseRepository', () => {
     ]);
   });
 
+  it('getMeals selects non-archived meals and maps rows', async () => {
+    const { client, calls } = fakeClient({ data: [savedMealRow] });
+    const meals = await new SupabaseRepository(client).getMeals();
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['saved_meals'] },
+      { method: 'select', args: ['id, name, items'] },
+      { method: 'is', args: ['archived_at', null] },
+    ]);
+    expect(meals).toEqual([savedMeal]);
+  });
+
+  it('addMeal inserts a row with the components as items', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).addMeal(savedMeal);
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['saved_meals'] },
+      { method: 'insert', args: [savedMealRow] },
+    ]);
+  });
+
+  it('updateMeal updates by id without repeating id in the payload', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).updateMeal(savedMeal);
+
+    const { id: _id, ...rowWithoutId } = savedMealRow;
+    expect(calls).toEqual([
+      { method: 'from', args: ['saved_meals'] },
+      { method: 'update', args: [rowWithoutId] },
+      { method: 'eq', args: ['id', 'meal-1'] },
+    ]);
+  });
+
+  it('archiveMeal stamps archived_at instead of deleting', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).archiveMeal('meal-1');
+
+    expect(calls).toEqual([
+      { method: 'from', args: ['saved_meals'] },
+      { method: 'update', args: [{ archived_at: expect.any(String) }] },
+      { method: 'eq', args: ['id', 'meal-1'] },
+    ]);
+  });
+
   it('getMealSuggestions calls the meal_suggestions function and splits the groups', async () => {
     const other = { ...foodRow, id: 'food-2', name: 'Oatmeal' };
     const { client, calls } = fakeClient({
@@ -416,6 +485,10 @@ describe('SupabaseRepository', () => {
     ['addFood', (r: SupabaseRepository) => r.addFood(food)],
     ['updateFood', (r: SupabaseRepository) => r.updateFood(food)],
     ['archiveFood', (r: SupabaseRepository) => r.archiveFood('food-1')],
+    ['getMeals', (r: SupabaseRepository) => r.getMeals()],
+    ['addMeal', (r: SupabaseRepository) => r.addMeal(savedMeal)],
+    ['updateMeal', (r: SupabaseRepository) => r.updateMeal(savedMeal)],
+    ['archiveMeal', (r: SupabaseRepository) => r.archiveMeal('meal-1')],
     ['getMealSuggestions', (r: SupabaseRepository) => r.getMealSuggestions('breakfast')],
     ['getFoodLastUsed', (r: SupabaseRepository) => r.getFoodLastUsed()],
     [
