@@ -112,6 +112,7 @@ const foodRow = {
   protein: 14,
   fat: 12,
   source: 'manual',
+  skip_macro_check: false,
 };
 
 const savedMeal: SavedMeal = {
@@ -312,6 +313,23 @@ describe('SupabaseRepository', () => {
       { method: 'update', args: [rowWithoutId] },
       { method: 'eq', args: ['id', 'food-1'] },
     ]);
+  });
+
+  it('round-trips the skip-macro-check flag on and off', async () => {
+    const flagged = { ...food, skipMacroCheck: true };
+    const flaggedRow = { ...foodRow, skip_macro_check: true };
+
+    // Read: a true column becomes skipMacroCheck: true.
+    const { client: readClient } = fakeClient({ data: [flaggedRow] });
+    expect(await new SupabaseRepository(readClient).getFoods()).toEqual([flagged]);
+
+    // Write: the flag maps to the snake_case column.
+    const { client: writeClient, calls } = fakeClient();
+    await new SupabaseRepository(writeClient).addFood({ ...flagged, description: undefined });
+    expect(calls[1]).toEqual({
+      method: 'insert',
+      args: [{ ...flaggedRow, description: null }],
+    });
   });
 
   it('archiveFood stamps archived_at instead of deleting', async () => {

@@ -107,6 +107,9 @@ function renderFoods(foods: LibraryFood[], meals: SavedMeal[] = []) {
   return repository;
 }
 
+// Some tests spy on window.confirm for the macro/calorie mismatch prompt.
+afterEach(() => vi.restoreAllMocks());
+
 /** Opens the edit form for a food already rendered in the library list. */
 async function openEditForm(name: string) {
   const row = (await screen.findByText(name)).closest('.food-row') as HTMLElement;
@@ -122,6 +125,8 @@ const saveAsNew = () => screen.queryByText('Save as new food');
 
 describe('FoodsScreen save as new food', () => {
   it('forks a saved food into a new one and leaves the original alone', async () => {
+    // 420 kcal no longer matches PB&J's macros (~289), so the fork prompts.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const repository = renderFoods([PBJ]);
     await openEditForm('PB&J');
 
@@ -218,6 +223,89 @@ describe('FoodsScreen save as new food', () => {
     ).toBeInTheDocument();
     expect(repository.added).toHaveLength(0);
     expect(repository.updated).toHaveLength(0);
+  });
+});
+
+// Beer's alcohol calories never reconcile with its macros: 6c + 1p + 0f ≈ 28
+// kcal against 110. Already opted out of the mismatch warning.
+const BEER: LibraryFood = {
+  id: 'beer',
+  name: 'Modelo',
+  servingLabel: 'serving',
+  calories: 110,
+  carbs: 6,
+  protein: 1,
+  fat: 0,
+  source: 'manual',
+  skipMacroCheck: true,
+};
+
+describe('FoodsScreen macro/calorie mismatch warning', () => {
+  it('warns when a brand-new food added from scratch does not add up', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const repository = renderFoods([]);
+
+    fireEvent.click(await screen.findByText('+ Add food item'));
+    setName('Modelo');
+    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '110' } });
+    fireEvent.change(screen.getByLabelText('Carbs (g)'), { target: { value: '6' } });
+    fireEvent.change(screen.getByLabelText('Protein (g)'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Fat (g)'), { target: { value: '0' } });
+    fireEvent.click(screen.getByText('Add to library'));
+
+    await waitFor(() => expect(repository.added).toHaveLength(1));
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(repository.added[0]).toMatchObject({ name: 'Modelo', calories: 110, skipMacroCheck: true });
+  });
+
+  it('warns when an edit makes the macros stop adding up, and cancelling aborts', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const repository = renderFoods([OATMEAL]);
+    await openEditForm('Oatmeal');
+
+    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '400' } });
+    fireEvent.click(screen.getByText('Save changes'));
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(repository.updated).toHaveLength(0);
+  });
+
+  it('opts the food out for good when the user saves the mismatch anyway', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const repository = renderFoods([OATMEAL]);
+    await openEditForm('Oatmeal');
+
+    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '400' } });
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(repository.updated).toHaveLength(1));
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(repository.updated[0]).toMatchObject({ id: 'oatmeal', calories: 400, skipMacroCheck: true });
+  });
+
+  it('never warns for a food already opted out, and preserves the flag', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const repository = renderFoods([BEER]);
+    await openEditForm('Modelo');
+
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(repository.updated).toHaveLength(1));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(repository.updated[0]).toMatchObject({ id: 'beer', skipMacroCheck: true });
+  });
+
+  it('flags a mismatched fork and does not inherit the original food’s opt-out', async () => {
+    // Forking the already-opted-out beer must warn again — a fork starts fresh.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const repository = renderFoods([BEER]);
+    await openEditForm('Modelo');
+
+    setName('Modelo Negra');
+    fireEvent.click(saveAsNew()!);
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(repository.added).toHaveLength(0);
   });
 });
 
