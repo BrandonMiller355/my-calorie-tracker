@@ -70,6 +70,12 @@ export interface LibraryFood extends ServingAnchor {
   source: 'manual' | 'search';
   /** ISO timestamp; archived foods are hidden from suggestions and search */
   archivedAt?: string;
+  /**
+   * When set, the macro/calorie mismatch warning is suppressed for this food
+   * (per food-logging). Off by default; set the first time the user saves a
+   * mismatched entry for this food anyway.
+   */
+  skipMacroCheck?: boolean;
 }
 
 /**

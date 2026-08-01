@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { findFoodByName, matchFoods, normalizeFoodName } from '../lib/foodMatch';
+import { checkMacroCalories, macroMismatchMessage } from '../lib/macroCheck';
 import { resolveMeal } from '../lib/meal';
 import { MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
@@ -85,13 +86,31 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
     }
 
     setErrors({});
+
+    // Warn when the entered calories don't match the macros, unless this food is
+    // already opted out (a fork starts fresh). Saving anyway opts it out for
+    // good, so it never warns again here or when logged (per food-logging).
+    let skipMacroCheck = mode === 'update' ? editing?.skipMacroCheck : undefined;
+    if (!skipMacroCheck) {
+      const mismatch = checkMacroCalories(
+        result.parsed.calories,
+        result.parsed.carbs,
+        result.parsed.protein,
+        result.parsed.fat,
+      );
+      if (mismatch) {
+        if (!window.confirm(macroMismatchMessage(mismatch))) return;
+        skipMacroCheck = true;
+      }
+    }
+
     setSaving(true);
     setSaveFailed(false);
     try {
       if (mode === 'update' && editing) {
-        await updateFood({ ...editing, ...result.parsed });
+        await updateFood({ ...editing, ...result.parsed, skipMacroCheck });
       } else {
-        await addFood({ ...result.parsed, source: 'manual' });
+        await addFood({ ...result.parsed, source: 'manual', skipMacroCheck });
       }
       onClose();
     } catch {

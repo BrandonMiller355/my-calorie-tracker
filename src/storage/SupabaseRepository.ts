@@ -109,6 +109,7 @@ interface FoodRow extends AnchorColumns {
   protein: number;
   fat: number;
   source: LibraryFood['source'];
+  skip_macro_check: boolean;
 }
 
 function toFoodRow(food: LibraryFood): FoodRow {
@@ -123,6 +124,7 @@ function toFoodRow(food: LibraryFood): FoodRow {
     protein: food.protein,
     fat: food.fat,
     source: food.source,
+    skip_macro_check: food.skipMacroCheck ?? false,
   };
 }
 
@@ -138,6 +140,7 @@ function fromFoodRow(row: FoodRow): LibraryFood {
     protein: row.protein,
     fat: row.fat,
     source: row.source,
+    skipMacroCheck: row.skip_macro_check || undefined,
   };
 }
 

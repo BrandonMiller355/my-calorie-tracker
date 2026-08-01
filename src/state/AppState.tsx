@@ -178,12 +178,16 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 /**
- * addEntry input: `description` and `recipe` are not stored on the entry —
- * they seed the library food when the entry is auto-captured as a new food.
- * Exception: quick entries (source 'quick') skip capture entirely and keep
- * their description on the entry itself.
+ * addEntry input: `description`, `recipe`, and `skipMacroCheck` are not stored
+ * on the entry — they seed the library food when the entry is auto-captured as
+ * a new food. Exception: quick entries (source 'quick') skip capture entirely
+ * and keep their description on the entry itself.
  */
-export type NewEntryInput = Omit<FoodEntry, 'id'> & { description?: string; recipe?: string };
+export type NewEntryInput = Omit<FoodEntry, 'id'> & {
+  description?: string;
+  recipe?: string;
+  skipMacroCheck?: boolean;
+};
 
 export interface AppContextValue extends AppState {
   /**
@@ -384,7 +388,7 @@ export function AppProvider({
 
   const addEntry = useCallback(
     async (input: NewEntryInput) => {
-      const { description, recipe, ...entryInput } = input;
+      const { description, recipe, skipMacroCheck, ...entryInput } = input;
       // Quick calories-only entries never create, match, or link a library
       // food — even if one named "Calories" exists.
       if (entryInput.source === 'quick') {
@@ -419,6 +423,7 @@ export function AppProvider({
             protein: entryInput.protein,
             fat: entryInput.fat,
             source: entryInput.source,
+            skipMacroCheck: skipMacroCheck || undefined,
           };
           try {
             await repository.addFood(food);

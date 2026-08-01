@@ -26,3 +26,11 @@ export function checkMacroCalories(
 
   return { expected: Math.round(expected), entered: calories };
 }
+
+/** The confirm-dialog wording shown for a macro/calorie mismatch. */
+export function macroMismatchMessage(mismatch: MacroMismatch): string {
+  return (
+    `The carbs, protein, and fat add up to about ${mismatch.expected} kcal, but you entered ` +
+    `${mismatch.entered} kcal. Save anyway?`
+  );
+}

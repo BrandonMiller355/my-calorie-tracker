@@ -782,3 +782,118 @@ describe('EntryForm meal logging', () => {
     expect(repository.addEntryCalls).toHaveLength(0);
   });
 });
+
+// Beer: alcohol calories the tracked macros can't account for, so 6c + 1p + 0f
+// ≈ 28 kcal never reconciles with its 110 kcal — a permanent mismatch.
+const BEER: LibraryFood = {
+  id: 'food-beer',
+  name: 'Modelo',
+  servingLabel: 'serving',
+  calories: 110,
+  carbs: 6,
+  protein: 1,
+  fat: 0,
+  source: 'manual',
+};
+
+const BEER_ENTRY: FoodEntry = {
+  id: 'entry-beer',
+  date: '2026-07-09',
+  meal: 'dinner',
+  name: 'Modelo',
+  amount: 1,
+  unit: 'serving',
+  servingLabel: 'serving',
+  quantity: 1,
+  calories: 110,
+  carbs: 6,
+  protein: 1,
+  fat: 0,
+  source: 'manual',
+  foodId: 'food-beer',
+};
+
+describe('EntryForm macro/calorie mismatch warning', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('never warns for a linked food already flagged to skip the check', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const repository = new FakeRepository();
+    repository.library = [{ ...BEER, skipMacroCheck: true }];
+    const onClose = vi.fn();
+    await renderForm({ editing: BEER_ENTRY, onClose, repository });
+
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(repository.updateEntryCalls).toHaveLength(1);
+    // Already flagged, so no re-write of the food.
+    expect(repository.updateFoodCalls).toHaveLength(0);
+  });
+
+  it('warns on an unflagged mismatch and backing out aborts the save', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const repository = new FakeRepository();
+    repository.library = [BEER];
+    const onClose = vi.fn();
+    await renderForm({ editing: BEER_ENTRY, onClose, repository });
+
+    fireEvent.click(screen.getByText('Save changes'));
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(repository.updateEntryCalls).toHaveLength(0);
+    expect(repository.updateFoodCalls).toHaveLength(0);
+  });
+
+  it('flags the linked food when the user saves the mismatch anyway', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const repository = new FakeRepository();
+    repository.library = [BEER];
+    const onClose = vi.fn();
+    await renderForm({ editing: BEER_ENTRY, onClose, repository });
+
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(repository.updateEntryCalls).toHaveLength(1);
+    expect(repository.updateFoodCalls).toHaveLength(1);
+    expect(repository.updateFoodCalls[0]).toMatchObject({ id: 'food-beer', skipMacroCheck: true });
+  });
+
+  it('does not warn when calories match the macros within tolerance', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const repository = new FakeRepository();
+    repository.library = [BEER];
+    const onClose = vi.fn();
+    // 6c + 1p + 0f ≈ 28 kcal; entering 30 sits inside the 50 kcal slack.
+    await renderForm({ editing: { ...BEER_ENTRY, calories: 30 }, onClose, repository });
+
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(repository.updateFoodCalls).toHaveLength(0);
+  });
+
+  it('warns every time for a quick entry and never flags a food', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+    enterQuickMode();
+
+    fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '400' } });
+    fireEvent.change(screen.getByLabelText(/Carbs \(g\)/), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText(/Protein \(g\)/), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText(/Fat \(g\)/), { target: { value: '5' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(repository.addEntryCalls[0]).toMatchObject({ source: 'quick', calories: 400 });
+    expect(repository.addFoodCalls).toHaveLength(0);
+    expect(repository.updateFoodCalls).toHaveLength(0);
+  });
+});
