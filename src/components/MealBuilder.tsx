@@ -14,10 +14,6 @@ export type MealBuilderMode =
   | { kind: 'create'; seed: LibraryFood[] }
   | { kind: 'edit'; meal: SavedMeal };
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
 /** A seed food (or an edited meal's component) as an editable builder row. */
 function seedComponent(food: LibraryFood): MealComponentFormValue {
   return { food, amount: '1', unit: food.servingLabel };
@@ -69,7 +65,7 @@ export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose:
     [foods, addQuery, components],
   );
 
-  const total = round1(
+  const total = Math.round(
     components.reduce((sum, c) => sum + (rowCalories(c) ?? 0), 0),
   );
 
@@ -183,7 +179,7 @@ export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose:
                       ))}
                     </select>
                   </div>
-                  {cals !== null && <span className="meal-component-cal">{round1(cals)} kcal</span>}
+                  {cals !== null && <span className="meal-component-cal">{Math.round(cals)} kcal</span>}
                   {(rowError?.amount || rowError?.unit) && (
                     <span className="field-error">{rowError.amount ?? rowError.unit}</span>
                   )}

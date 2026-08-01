@@ -13,10 +13,6 @@ export interface LogMealSheetProps {
   onCancel: () => void;
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
 /**
  * Confirm sheet for logging a saved meal. Shows the resolved components, the
  * live total, and the target slot, then fans the meal out into ordinary entries
@@ -86,7 +82,7 @@ export function LogMealSheet({ meal, date, defaultSlot, onLogged, onCancel }: Lo
                 <span>
                   {r.food.name} · {r.component.amount} {unitLabel(r.component.unit)}
                 </span>
-                <span className="log-meal-item-cal">{round1(r.calories)} kcal</span>
+                <span className="log-meal-item-cal">{Math.round(r.calories)} kcal</span>
               </li>
             ))}
           </ul>

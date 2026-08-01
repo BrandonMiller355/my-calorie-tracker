@@ -22,11 +22,11 @@ export function WeeklyDeficit({
         {goal !== null &&
           (deficit >= goal ? (
             <div className="weekly-deficit-goal">
-              Goal met ({goal} kcal) — {Math.round((deficit - goal) * 10) / 10} kcal extra
+              Goal met ({goal} kcal) — {Math.round(deficit - goal)} kcal extra
             </div>
           ) : (
             <div className="weekly-deficit-goal">
-              {Math.round((goal - deficit) * 10) / 10} kcal to go to hit your {goal} kcal goal
+              {Math.round(goal - deficit)} kcal to go to hit your {goal} kcal goal
             </div>
           ))}
       </div>

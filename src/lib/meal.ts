@@ -82,7 +82,7 @@ export function resolveMeal(meal: SavedMeal, foods: LibraryFood[]): ResolvedMeal
     resolved,
     unavailable,
     totals: {
-      calories: round1(totals.calories),
+      calories: Math.round(totals.calories),
       carbs: round1(totals.carbs),
       protein: round1(totals.protein),
       fat: round1(totals.fat),
