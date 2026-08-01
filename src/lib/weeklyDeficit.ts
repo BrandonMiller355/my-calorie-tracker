@@ -22,14 +22,13 @@ export function computeWeeklyDeficit(
   selectedDate: string,
   today: string,
 ): WeeklyDeficitResult {
-  const deficit =
-    Math.round(
-      weekSummary.reduce(
-        (sum, day) =>
-          day.date === today ? sum : sum + (day.effectiveGoalCalories - day.consumedCalories),
-        0,
-      ) * 10,
-    ) / 10;
+  const deficit = Math.round(
+    weekSummary.reduce(
+      (sum, day) =>
+        day.date === today ? sum : sum + (day.effectiveGoalCalories - day.consumedCalories),
+      0,
+    ),
+  );
   const hasMissingDays = weekSummary.some(
     (day) => !day.hasEntries && !(day.date === selectedDate && selectedDate === today),
   );

@@ -13,10 +13,15 @@ export function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Calories display as whole numbers — fractional calories aren't meaningful. */
+export function roundCalories(n: number): number {
+  return Math.round(n);
+}
+
 /** Nutrition for one entry, scaled by its serving quantity. */
 export function entryTotals(entry: FoodEntry): Totals {
   return {
-    calories: round1(entry.calories * entry.quantity),
+    calories: roundCalories(entry.calories * entry.quantity),
     carbs: round1(entry.carbs * entry.quantity),
     protein: round1(entry.protein * entry.quantity),
     fat: round1(entry.fat * entry.quantity),
@@ -28,7 +33,7 @@ export function sumTotals(entries: FoodEntry[]): Totals {
   return entries.reduce<Totals>((acc, e) => {
     const t = entryTotals(e);
     return {
-      calories: round1(acc.calories + t.calories),
+      calories: roundCalories(acc.calories + t.calories),
       carbs: round1(acc.carbs + t.carbs),
       protein: round1(acc.protein + t.protein),
       fat: round1(acc.fat + t.fat),

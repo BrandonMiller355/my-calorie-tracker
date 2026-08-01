@@ -290,7 +290,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const preview =
     previewQuantity !== null && values.calories.trim() !== '' && Number.isFinite(previewCalories)
       ? {
-          calories: round1(previewCalories * previewQuantity),
+          calories: Math.round(previewCalories * previewQuantity),
           fat: round1((Number(values.fat.trim()) || 0) * previewQuantity),
           carbs: round1((Number(values.carbs.trim()) || 0) * previewQuantity),
           protein: round1((Number(values.protein.trim()) || 0) * previewQuantity),

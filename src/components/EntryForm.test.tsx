@@ -273,8 +273,8 @@ describe('EntryForm identify action', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('Chicken breast');
     expect(screen.getByLabelText('Amount')).toHaveValue('142');
     expect(screen.getByLabelText('Unit')).toHaveValue('g');
-    // 1.42 servings of 165 kcal
-    expect(screen.getByTestId('entry-preview')).toHaveTextContent('234.3 kcal');
+    // 1.42 servings of 165 kcal, rounded to whole calories
+    expect(screen.getByTestId('entry-preview')).toHaveTextContent('234 kcal');
     // A scale read is trusted, not caveated
     expect(screen.queryByText(/Weight estimated by AI/)).not.toBeInTheDocument();
     expect(screen.queryByTestId('identify-overlay')).not.toBeInTheDocument();
@@ -446,8 +446,8 @@ describe('EntryForm text-log action', () => {
     expect(screen.getByLabelText('Amount')).toHaveValue('150');
     expect(screen.getByLabelText('Unit')).toHaveValue('g');
     expect(screen.getByRole('radio', { name: 'Dinner' })).toBeChecked();
-    // 1.5 servings of 165 kcal
-    expect(screen.getByTestId('entry-preview')).toHaveTextContent('247.5 kcal');
+    // 1.5 servings of 165 kcal, rounded to whole calories
+    expect(screen.getByTestId('entry-preview')).toHaveTextContent('248 kcal');
   });
 
   it('fills the form from a single estimate as a new one-serving food', async () => {
