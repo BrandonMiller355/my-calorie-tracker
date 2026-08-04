@@ -392,12 +392,16 @@ const TACO_SALAD: SavedMeal = {
   ],
 };
 
-/** Enter multi-select mode and tick the named foods' checkboxes. */
+/** Enter multi-select mode and tick the named foods, searching for each in turn —
+ *  select mode lists nothing until the search narrows the library. */
 async function selectFoods(...names: string[]) {
   fireEvent.click(await screen.findByText('+ New meal'));
+  const filter = screen.getByLabelText('Filter your library');
   for (const name of names) {
+    fireEvent.change(filter, { target: { value: name } });
     fireEvent.click(screen.getByLabelText(`Select ${name}`));
   }
+  fireEvent.change(filter, { target: { value: '' } });
 }
 
 describe('FoodsScreen meal builder', () => {
@@ -439,19 +443,38 @@ describe('FoodsScreen meal builder', () => {
     });
   });
 
-  it('keeps the library filterable while selecting, without losing ticks', async () => {
+  it('lists no foods until the search narrows them, keeping ticks across searches', async () => {
     renderFoods([PBJ, OATMEAL]);
-    await selectFoods('PB&J');
+    fireEvent.click(await screen.findByText('+ New meal'));
+
+    // Nothing is listed up front — the library would bury the create button.
+    expect(screen.queryByLabelText('Select PB&J')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Select Oatmeal')).not.toBeInTheDocument();
 
     const filter = screen.getByLabelText('Filter your library');
+    fireEvent.change(filter, { target: { value: 'pb' } });
+    fireEvent.click(screen.getByLabelText('Select PB&J'));
+
     fireEvent.change(filter, { target: { value: 'oat' } });
-    // PB&J is filtered out of view but its selection is retained
-    expect(screen.queryByText('PB&J')).not.toBeInTheDocument();
-    expect(screen.getByText('Oatmeal')).toBeInTheDocument();
+    // PB&J is out of the results but still ticked, shown as a chip
+    expect(screen.queryByLabelText('Select PB&J')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Unselect PB&J')).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('Select Oatmeal'));
     fireEvent.change(filter, { target: { value: '' } });
+    // With two picked, the create button is on screen without any list to scroll
     expect(screen.getByText('Create meal from 2 foods')).toBeInTheDocument();
+  });
+
+  it('drops a food from the selection when its chip is tapped', async () => {
+    renderFoods([PBJ, OATMEAL]);
+    await selectFoods('PB&J', 'Oatmeal');
+    expect(screen.getByText('Create meal from 2 foods')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Unselect Oatmeal'));
+
+    expect(screen.queryByLabelText('Unselect Oatmeal')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Create meal from/)).not.toBeInTheDocument();
   });
 
   it('requires a name before saving', async () => {
