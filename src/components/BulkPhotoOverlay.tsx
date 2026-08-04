@@ -83,7 +83,7 @@ function prefillFields(
  * of them from one review list.
  */
 export function BulkPhotoOverlay({ foods, date, meal, onLogged, onCancel }: BulkPhotoOverlayProps) {
-  const { addEntry } = useAppState();
+  const { addEntry, setFoodImage } = useAppState();
   const [phase, setPhase] = useState<Phase>({ kind: 'selecting' });
   const [photos, setPhotos] = useState<string[]>([]);
   const [rows, setRows] = useState<BulkRow[]>([]);
@@ -278,6 +278,9 @@ export function BulkPhotoOverlay({ foods, date, meal, onLogged, onCancel }: Bulk
           source: 'manual',
           foodId: food.id,
         });
+        // Auto-attach this row's photo to a matched food with no image yet.
+        // Fire-and-forget so it never holds up logging, and never overwrites.
+        if (!food.imagePath) void setFoodImage(food.id, next.image);
         remaining = remaining.filter((r) => r.key !== next.key);
         setRows(remaining);
       }

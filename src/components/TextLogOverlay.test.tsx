@@ -98,6 +98,13 @@ class FakeRepository implements StorageRepository {
   }
   async updateFood(): Promise<void> {}
   async archiveFood(): Promise<void> {}
+  async uploadFoodImage(foodId: string): Promise<string> {
+    return `uid/${foodId}.jpg`;
+  }
+  async removeFoodImage(): Promise<void> {}
+  async getFoodImageUrl(path: string): Promise<string> {
+    return `signed:${path}`;
+  }
   async getMeals(): Promise<SavedMeal[]> {
     return [];
   }

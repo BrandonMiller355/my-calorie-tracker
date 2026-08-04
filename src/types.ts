@@ -70,6 +70,12 @@ export interface LibraryFood extends ServingAnchor {
   source: 'manual' | 'search';
   /** ISO timestamp; archived foods are hidden from suggestions and search */
   archivedAt?: string;
+  /**
+   * Storage object key of this food's photo in the private `food-images`
+   * bucket, or undefined when the food has no photo. The image is fetched for
+   * display through a short-lived signed URL, never a public URL.
+   */
+  imagePath?: string;
 }
 
 /**

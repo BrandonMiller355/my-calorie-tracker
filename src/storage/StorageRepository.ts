@@ -40,6 +40,15 @@ export interface StorageRepository {
   updateFood(food: LibraryFood): Promise<void>;
   /** Hides the food from suggestions and search; never deletes the row. */
   archiveFood(id: string): Promise<void>;
+  /**
+   * Uploads (or overwrites) the food's photo in the private image bucket and
+   * records its object key on the food row; resolves to the stored key.
+   */
+  uploadFoodImage(foodId: string, blob: Blob): Promise<string>;
+  /** Deletes the food's photo object and clears the row's image reference. */
+  removeFoodImage(foodId: string): Promise<void>;
+  /** A short-lived signed URL for displaying a stored food image. */
+  getFoodImageUrl(path: string): Promise<string>;
   /** The user's saved meals, excluding archived ones. */
   getMeals(): Promise<SavedMeal[]>;
   addMeal(meal: SavedMeal): Promise<void>;

@@ -12,6 +12,8 @@ import { startOfWeek, todayKey } from '../lib/date';
 import { findFoodByName } from '../lib/foodMatch';
 import { resolveMeal } from '../lib/meal';
 import { computeWeeklyDeficit } from '../lib/weeklyDeficit';
+import { dataUrlToBlob } from '../lib/photo';
+import { invalidateFoodImage } from '../lib/foodImageCache';
 import type { StorageRepository } from '../storage';
 import {
   DEFAULT_GOALS,
@@ -216,6 +218,17 @@ export interface AppContextValue extends AppState {
   addFood: (food: Omit<LibraryFood, 'id'>) => Promise<void>;
   updateFood: (food: LibraryFood) => Promise<void>;
   archiveFood: (id: string) => Promise<void>;
+  /**
+   * Attaches (or replaces) a food's photo from a JPEG data URL. Non-blocking:
+   * the returned promise settles when the upload finishes, but callers auto-
+   * attaching from a match should not await it, and a failure is swallowed so
+   * it never disturbs the primary action (logging, saving, matching).
+   */
+  setFoodImage: (foodId: string, dataUrl: string) => Promise<void>;
+  /** Removes a food's photo and clears its image reference. */
+  removeFoodImage: (foodId: string) => Promise<void>;
+  /** A short-lived signed URL for displaying a stored food image. */
+  getFoodImageUrl: (path: string) => Promise<string>;
   addMeal: (meal: Omit<SavedMeal, 'id'>) => Promise<void>;
   updateMeal: (meal: SavedMeal) => Promise<void>;
   archiveMeal: (id: string) => Promise<void>;
@@ -498,6 +511,44 @@ export function AppProvider({
     [repository],
   );
 
+  const setFoodImage = useCallback(
+    async (foodId: string, dataUrl: string) => {
+      // Best-effort: an upload failure must never disturb the primary action
+      // (logging an entry, saving a food, or resolving a match), so it is
+      // swallowed here rather than surfaced as a rejection.
+      try {
+        const imagePath = await repository.uploadFoodImage(foodId, dataUrlToBlob(dataUrl));
+        // A replace reuses the same object key, so the cached signed URL must be
+        // dropped or the old image would linger until a reload.
+        invalidateFoodImage(imagePath);
+        const food = state.foods.find((f) => f.id === foodId);
+        if (food) dispatch({ type: 'food-updated', food: { ...food, imagePath } });
+      } catch {
+        // no-op; the food simply keeps whatever image it had (often none)
+      }
+    },
+    [repository, state.foods],
+  );
+
+  const removeFoodImage = useCallback(
+    async (foodId: string) => {
+      try {
+        const food = state.foods.find((f) => f.id === foodId);
+        await repository.removeFoodImage(foodId);
+        if (food?.imagePath) invalidateFoodImage(food.imagePath);
+        if (food) dispatch({ type: 'food-updated', food: { ...food, imagePath: undefined } });
+      } catch {
+        // no-op; the food keeps its current image
+      }
+    },
+    [repository, state.foods],
+  );
+
+  const getFoodImageUrl = useCallback(
+    (path: string) => repository.getFoodImageUrl(path),
+    [repository],
+  );
+
   const addMeal = useCallback(
     async (input: Omit<SavedMeal, 'id'>) => {
       const meal: SavedMeal = { ...input, id: crypto.randomUUID() };
@@ -605,6 +656,9 @@ export function AppProvider({
       addFood,
       updateFood,
       archiveFood,
+      setFoodImage,
+      removeFoodImage,
+      getFoodImageUrl,
       addMeal,
       updateMeal,
       archiveMeal,
@@ -629,6 +683,9 @@ export function AppProvider({
       addFood,
       updateFood,
       archiveFood,
+      setFoodImage,
+      removeFoodImage,
+      getFoodImageUrl,
       addMeal,
       updateMeal,
       archiveMeal,

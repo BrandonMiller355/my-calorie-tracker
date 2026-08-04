@@ -146,6 +146,33 @@ create policy "own foods delete" on foods
 -- written only by quick calories-only entries.)
 alter table foods add column recipe text;
 
+-- Optional per-food photo. Holds the object key of a downscaled JPEG in the
+-- private `food-images` Storage bucket (see below); null means the food has no
+-- photo. The image itself never lives in Postgres, only this reference.
+alter table foods add column image_path text;
+
+-- Food photos live in a PRIVATE Supabase Storage bucket named `food-images`,
+-- created by hand in the dashboard (not creatable from this schema file).
+-- Objects are keyed `${auth.uid()}/${food_id}.jpg`, so the first path segment
+-- is the owner. Add these owner-only policies on storage.objects (dashboard):
+--
+--   create policy "own food images select" on storage.objects
+--     for select using (
+--       bucket_id = 'food-images'
+--       and (storage.foldername(name))[1] = auth.uid()::text);
+--   create policy "own food images insert" on storage.objects
+--     for insert with check (
+--       bucket_id = 'food-images'
+--       and (storage.foldername(name))[1] = auth.uid()::text);
+--   create policy "own food images update" on storage.objects
+--     for update using (
+--       bucket_id = 'food-images'
+--       and (storage.foldername(name))[1] = auth.uid()::text);
+--   create policy "own food images delete" on storage.objects
+--     for delete using (
+--       bucket_id = 'food-images'
+--       and (storage.foldername(name))[1] = auth.uid()::text);
+
 -- Name-field suggestions: up to 5 foods most recently logged for the meal,
 -- then up to 5 most often logged for it, deduped across the two groups and
 -- excluding archived foods. security invoker (the default), so RLS on both

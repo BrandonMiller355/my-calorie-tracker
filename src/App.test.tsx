@@ -158,6 +158,21 @@ class FakeRepository implements StorageRepository {
     const food = this.foods.get(id);
     if (food) this.foods.set(id, { ...food, archivedAt: new Date().toISOString() });
   }
+  async uploadFoodImage(foodId: string): Promise<string> {
+    this.assertWrites();
+    const path = `uid/${foodId}.jpg`;
+    const food = this.foods.get(foodId);
+    if (food) this.foods.set(foodId, { ...food, imagePath: path });
+    return path;
+  }
+  async removeFoodImage(foodId: string): Promise<void> {
+    this.assertWrites();
+    const food = this.foods.get(foodId);
+    if (food) this.foods.set(foodId, { ...food, imagePath: undefined });
+  }
+  async getFoodImageUrl(path: string): Promise<string> {
+    return `signed:${path}`;
+  }
   async getMeals(): Promise<SavedMeal[]> {
     return [];
   }

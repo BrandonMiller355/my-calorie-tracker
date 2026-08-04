@@ -11,6 +11,13 @@ import type {
   WeekDeficitDay,
 } from '../types';
 
+// The camera/file overlay is untestable in jsdom; the stub captures directly.
+vi.mock('../components/PhotoCapture', () => ({
+  PhotoCapture: ({ onCapture }: { onCapture: (img: string) => void; onCancel: () => void }) => (
+    <button onClick={() => onCapture('data:image/jpeg;base64,editorphoto')}>stub-capture</button>
+  ),
+}));
+
 const PBJ: LibraryFood = {
   id: 'pbj',
   name: 'PB&J',
@@ -40,6 +47,8 @@ class FakeRepository implements StorageRepository {
   addedMeals: SavedMeal[] = [];
   updatedMeals: SavedMeal[] = [];
   archivedMeals: string[] = [];
+  imageUploads: { foodId: string; blob: Blob }[] = [];
+  imageRemovals: string[] = [];
   constructor(
     private foods: LibraryFood[] = [],
     private meals: SavedMeal[] = [],
@@ -70,6 +79,16 @@ class FakeRepository implements StorageRepository {
     this.updated.push(food);
   }
   async archiveFood(): Promise<void> {}
+  async uploadFoodImage(foodId: string, blob: Blob): Promise<string> {
+    this.imageUploads.push({ foodId, blob });
+    return `uid/${foodId}.jpg`;
+  }
+  async removeFoodImage(foodId: string): Promise<void> {
+    this.imageRemovals.push(foodId);
+  }
+  async getFoodImageUrl(path: string): Promise<string> {
+    return `signed:${path}`;
+  }
   async getMeals(): Promise<SavedMeal[]> {
     return this.meals;
   }
@@ -218,6 +237,61 @@ describe('FoodsScreen save as new food', () => {
     ).toBeInTheDocument();
     expect(repository.added).toHaveLength(0);
     expect(repository.updated).toHaveLength(0);
+  });
+});
+
+const PBJ_WITH_PHOTO: LibraryFood = { ...PBJ, imagePath: 'uid/pbj.jpg' };
+
+describe('FoodsScreen food photos', () => {
+  it('attaches a chosen photo to the edited food', async () => {
+    const repository = renderFoods([OATMEAL]);
+    await openEditForm('Oatmeal');
+
+    fireEvent.click(screen.getByLabelText('Add photo'));
+    fireEvent.click(screen.getByText('stub-capture'));
+
+    await waitFor(() => expect(repository.imageUploads).toHaveLength(1));
+    expect(repository.imageUploads[0].foodId).toBe('oatmeal');
+  });
+
+  it('reveals Replace/Remove icons only on the enlarged photo and removes it', async () => {
+    const repository = renderFoods([PBJ_WITH_PHOTO]);
+    const form = await openEditForm('PB&J');
+
+    // No action icons on the small thumbnail.
+    expect(within(form).queryByLabelText('Remove photo')).not.toBeInTheDocument();
+
+    // Tapping the form's thumbnail enlarges it; the icons live on that view.
+    fireEvent.click(await within(form).findByLabelText('View PB&J photo'));
+    expect(within(form).getByLabelText('Replace photo')).toBeInTheDocument();
+    fireEvent.click(within(form).getByLabelText('Remove photo'));
+
+    await waitFor(() => expect(repository.imageRemovals).toEqual(['pbj']));
+  });
+
+  it('saves text changes independently of the photo', async () => {
+    const repository = renderFoods([OATMEAL]);
+    await openEditForm('Oatmeal');
+
+    // Save the text edit without ever touching a photo.
+    setName('Oatmeal, steel cut');
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await screen.findByText('Oatmeal, steel cut');
+    expect(repository.updated).toHaveLength(1);
+    expect(repository.imageUploads).toHaveLength(0);
+  });
+
+  it('keeps an existing photo when saving text/nutrition changes', async () => {
+    const repository = renderFoods([PBJ_WITH_PHOTO]);
+    await openEditForm('PB&J');
+
+    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '333' } });
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(repository.updated).toHaveLength(1));
+    // The image reference must survive the save, not be clobbered to undefined.
+    expect(repository.updated[0]).toMatchObject({ calories: 333, imagePath: 'uid/pbj.jpg' });
   });
 });
 

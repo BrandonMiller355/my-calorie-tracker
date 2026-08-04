@@ -20,8 +20,12 @@ type Phase =
 interface IdentifyOverlayProps {
   /** The user's library; archived foods are filtered out of the request. */
   foods: LibraryFood[];
-  /** A candidate was resolved (confidently or by the chooser). */
-  onMatch: (food: LibraryFood, amount?: IdentifiedAmount) => void;
+  /**
+   * A candidate was resolved (confidently or by the chooser). `image` is the
+   * identify photo, passed so the caller can auto-attach it to an image-less
+   * matched food.
+   */
+  onMatch: (food: LibraryFood, amount: IdentifiedAmount | undefined, image: string) => void;
   /** Nothing matched and the user chose to get an AI estimate for the same photo. */
   onEstimateFallback: (image: string, note: string) => void;
   onCancel: () => void;
@@ -67,7 +71,7 @@ export function IdentifyOverlay({ foods, onMatch, onEstimateFallback, onCancel }
       if (candidates.length === 0) {
         setPhase({ kind: 'no-match' });
       } else if (candidates.length === 1) {
-        onMatch(candidates[0], result.amount);
+        onMatch(candidates[0], result.amount, img);
       } else {
         setPhase({ kind: 'picking', candidates, amount: result.amount });
       }
@@ -138,7 +142,7 @@ export function IdentifyOverlay({ foods, onMatch, onEstimateFallback, onCancel }
                   <button
                     type="button"
                     className="identify-candidate"
-                    onClick={() => onMatch(food, phase.amount)}
+                    onClick={() => image && onMatch(food, phase.amount, image)}
                   >
                     <span className="identify-candidate-name">{food.name}</span>
                     {food.description && (

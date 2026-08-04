@@ -8,6 +8,8 @@ import {
   type FoodFormValues,
 } from '../lib/validation';
 import { MealBuilder, type MealBuilderMode } from '../components/MealBuilder';
+import { PhotoCapture } from '../components/PhotoCapture';
+import { FoodThumbnail } from '../components/FoodThumbnail';
 import { useAppState } from '../state/AppState';
 import { DEFAULT_SERVING_LABEL, type LibraryFood, type SavedMeal } from '../types';
 
@@ -47,11 +49,16 @@ function describeAnchor(food: LibraryFood): string {
 }
 
 function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => void }) {
-  const { foods, addFood, updateFood } = useAppState();
+  const { foods, addFood, updateFood, setFoodImage, removeFoodImage } = useAppState();
   const [values, setValues] = useState<FoodFormValues>(toFormValues(editing));
   const [errors, setErrors] = useState<FoodFormErrors>({});
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Attaching/replacing a photo goes through the camera/file overlay.
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
+  // The live food reflects image changes (which persist immediately, apart from
+  // the text/nutrition save) so the preview updates without closing the form.
+  const liveFood = editing ? (foods.find((f) => f.id === editing.id) ?? editing) : undefined;
   // Recipe text can be long, so it stays collapsed even when editing a food
   // that already has one, rather than expanding the form by default.
   const [recipeOpen, setRecipeOpen] = useState(false);
@@ -89,7 +96,10 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
     setSaveFailed(false);
     try {
       if (mode === 'update' && editing) {
-        await updateFood({ ...editing, ...result.parsed });
+        // Base the update on the live food, not the stale `editing` snapshot, so
+        // an image attached out-of-band (setFoodImage) isn't clobbered back to
+        // null by a text/nutrition save.
+        await updateFood({ ...(liveFood ?? editing), ...result.parsed });
       } else {
         await addFood({ ...result.parsed, source: 'manual' });
       }
@@ -123,20 +133,87 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
         <div className="sheet-handle" aria-hidden="true" />
         <h2>{editing ? 'Edit food' : 'Add food item'}</h2>
 
-        <label>
-          Name
-          <input value={values.name} onChange={(e) => setField('name', e.target.value)} autoFocus />
-          {errors.name && <span className="field-error">{errors.name}</span>}
-        </label>
-
-        <label>
-          Description (optional)
-          <input
-            value={values.description}
-            onChange={(e) => setField('description', e.target.value)}
-            placeholder="Brand, prep, weights"
-          />
-        </label>
+        <div className="food-edit-head">
+          {editing && liveFood && (
+            <div className="food-photo-col">
+            <div className="food-photo-block">
+              {liveFood.imagePath ? (
+                <FoodThumbnail
+                  food={liveFood}
+                  className="food-photo-preview"
+                  enlargeable
+                  renderActions={(close) => (
+                    <>
+                      <button
+                        type="button"
+                        className="food-photo-icon"
+                        aria-label="Replace photo"
+                        title="Replace photo"
+                        onClick={() => {
+                          close();
+                          setCapturingPhoto(true);
+                        }}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        type="button"
+                        className="food-photo-icon"
+                        aria-label="Remove photo"
+                        title="Remove photo"
+                        onClick={() => {
+                          close();
+                          void removeFoodImage(editing.id);
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </>
+                  )}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="food-photo-add"
+                  aria-label="Add photo"
+                  title="Add photo"
+                  onClick={() => setCapturingPhoto(true)}
+                >
+                  📷
+                </button>
+              )}
+            </div>
+              {!recipeOpen && (
+                <button
+                  type="button"
+                  className="link-button food-recipe-toggle"
+                  onClick={() => setRecipeOpen(true)}
+                >
+                  {values.recipe ? 'View recipe' : '+ Add recipe'}
+                </button>
+              )}
+            </div>
+          )}
+          <div className="food-edit-fields">
+            <label>
+              Name
+              <input
+                value={values.name}
+                onChange={(e) => setField('name', e.target.value)}
+                autoFocus
+              />
+              {errors.name && <span className="field-error">{errors.name}</span>}
+            </label>
+            <label>
+              Description (optional)
+              <input
+                value={values.description}
+                onChange={(e) => setField('description', e.target.value)}
+                placeholder="Brand, prep, weights"
+              />
+            </label>
+          </div>
+        </div>
 
         {recipeOpen ? (
           <label>
@@ -149,9 +226,13 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
             />
           </label>
         ) : (
-          <button type="button" className="link-button" onClick={() => setRecipeOpen(true)}>
-            {values.recipe ? 'View recipe' : '+ Add recipe'}
-          </button>
+          // In edit mode the toggle lives under the thumbnail; here it's only
+          // for the create form (which has no photo section).
+          !editing && (
+            <button type="button" className="link-button" onClick={() => setRecipeOpen(true)}>
+              {values.recipe ? 'View recipe' : '+ Add recipe'}
+            </button>
+          )
         )}
 
         <div className="serving-def">
@@ -244,6 +325,16 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
           </button>
         </div>
       </form>
+      {capturingPhoto && editing && (
+        <PhotoCapture
+          onCapture={(dataUrl) => {
+            setCapturingPhoto(false);
+            // Fire-and-forget: applying the photo is independent of the text save.
+            void setFoodImage(editing.id, dataUrl);
+          }}
+          onCancel={() => setCapturingPhoto(false)}
+        />
+      )}
     </div>
   );
 }
@@ -492,6 +583,7 @@ export function FoodsScreen() {
                       onChange={() => toggleSelected(food.id)}
                     />
                   )}
+                  <FoodThumbnail food={food} enlargeable />
                   <div className="food-row-main">
                     <span className="result-name">{food.name}</span>
                     {food.description && <span className="result-brand">{food.description}</span>}

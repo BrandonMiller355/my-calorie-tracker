@@ -36,6 +36,7 @@ vi.mock('../lib/photo', () => ({
     if (file.name.startsWith('bad')) throw new Error('not a decodable image');
     return `data:image/jpeg;base64,${file.name}`;
   }),
+  dataUrlToBlob: (dataUrl: string) => new Blob([dataUrl], { type: 'image/jpeg' }),
 }));
 
 const BEANS: LibraryFood = {
@@ -101,8 +102,12 @@ function match(food: LibraryFood, grams?: number, source: 'scale' | 'estimate' =
 
 class FakeRepository implements StorageRepository {
   addEntryCalls: FoodEntry[] = [];
+  imageUploads: { foodId: string; blob: Blob }[] = [];
+  /** When true, every image upload rejects (to prove logging is unaffected). */
+  failImageUpload = false;
   /** Entry names whose save should fail once, then succeed. */
   failOnceFor = new Set<string>();
+  constructor(private foodsList: LibraryFood[] = FOODS) {}
 
   async getEntriesByDate(): Promise<FoodEntry[]> {
     return [];
@@ -123,11 +128,20 @@ class FakeRepository implements StorageRepository {
   async saveGoalsForDate(): Promise<void> {}
   async clearGoalsForDate(): Promise<void> {}
   async getFoods(): Promise<LibraryFood[]> {
-    return FOODS;
+    return this.foodsList;
   }
   async addFood(): Promise<void> {}
   async updateFood(): Promise<void> {}
   async archiveFood(): Promise<void> {}
+  async uploadFoodImage(foodId: string, blob: Blob): Promise<string> {
+    if (this.failImageUpload) throw new Error('upload failed');
+    this.imageUploads.push({ foodId, blob });
+    return `uid/${foodId}.jpg`;
+  }
+  async removeFoodImage(): Promise<void> {}
+  async getFoodImageUrl(path: string): Promise<string> {
+    return `signed:${path}`;
+  }
   async getMeals(): Promise<SavedMeal[]> {
     return [];
   }
@@ -154,14 +168,16 @@ interface Callbacks {
   onCancel: ReturnType<typeof vi.fn>;
 }
 
-async function renderOverlay(): Promise<{ repository: FakeRepository } & Callbacks> {
-  const repository = new FakeRepository();
+async function renderOverlay(
+  foods: LibraryFood[] = FOODS,
+): Promise<{ repository: FakeRepository } & Callbacks> {
+  const repository = new FakeRepository(foods);
   const callbacks: Callbacks = { onLogged: vi.fn(), onCancel: vi.fn() };
   render(
     <AuthProvider>
       <AppProvider repository={repository}>
         <BulkPhotoOverlay
-          foods={FOODS}
+          foods={foods}
           date="2026-07-17"
           meal="lunch"
           onLogged={callbacks.onLogged}
@@ -435,5 +451,56 @@ describe('BulkPhotoOverlay failure handling', () => {
     fireEvent.click(screen.getByText('Add 1 entry'));
     await waitFor(() => expect(onLogged).toHaveBeenCalled());
     expect(repository.addEntryCalls.map((e) => e.name)).toEqual(['Black beans', 'Cheese sauce']);
+  });
+});
+
+describe('BulkPhotoOverlay photo auto-attach', () => {
+  it('attaches each logged row’s photo to its image-less matched food, skipping the unrecognized row', async () => {
+    identifyFoodMock
+      .mockResolvedValueOnce(match(BEANS, 142)) // photo 1
+      .mockResolvedValueOnce({ candidates: [] }) // photo 2: not recognized
+      .mockResolvedValueOnce(match(SALSA, 50)); // photo 3
+    const { repository, onLogged } = await renderOverlay();
+    await selectFiles([
+      photoFile('beans.jpg', 1000),
+      photoFile('mystery.jpg', 2000),
+      photoFile('salsa.jpg', 3000),
+    ]);
+
+    fireEvent.click(screen.getByText('Add 2 entries'));
+    await waitFor(() => expect(onLogged).toHaveBeenCalled());
+
+    // Only the two recognized rows attach; the unrecognized photo contributes none.
+    expect(repository.imageUploads.map((u) => u.foodId)).toEqual(['food-beans', 'food-salsa']);
+  });
+
+  it('does not re-attach to a matched food that already has a photo', async () => {
+    identifyFoodMock.mockResolvedValueOnce(match(BEANS, 142));
+    const { repository, onLogged } = await renderOverlay([
+      { ...BEANS, imagePath: 'uid/beans.jpg' },
+      CHEESE,
+      SALSA,
+      COOKIE,
+    ]);
+    await selectFiles([photoFile('beans.jpg', 1000)]);
+
+    fireEvent.click(screen.getByText('Add 1 entry'));
+    await waitFor(() => expect(onLogged).toHaveBeenCalled());
+
+    expect(repository.imageUploads).toHaveLength(0);
+  });
+
+  it('logs the batch even when the photo upload fails', async () => {
+    identifyFoodMock.mockResolvedValueOnce(match(BEANS, 142));
+    const { repository, onLogged } = await renderOverlay();
+    repository.failImageUpload = true;
+    await selectFiles([photoFile('beans.jpg', 1000)]);
+
+    fireEvent.click(screen.getByText('Add 1 entry'));
+    await waitFor(() => expect(onLogged).toHaveBeenCalled());
+
+    // The entry still logged; the failed attach recorded nothing and didn't throw.
+    expect(repository.addEntryCalls.map((e) => e.name)).toEqual(['Black beans']);
+    expect(repository.imageUploads).toHaveLength(0);
   });
 });

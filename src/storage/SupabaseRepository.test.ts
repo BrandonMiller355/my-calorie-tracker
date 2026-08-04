@@ -36,6 +36,27 @@ function fakeClient(result: FakeResult = {}) {
     onRejected?: (e: unknown) => unknown,
   ) => Promise.resolve({ data: null, error: null, ...result }).then(onFulfilled, onRejected);
 
+  // Storage sub-client: records upload/remove/createSignedUrl and resolves with
+  // the shapes the real @supabase/supabase-js storage API returns.
+  const storageBuilder = {
+    upload: (...args: unknown[]) => {
+      calls.push({ method: 'upload', args });
+      return Promise.resolve({ data: null, error: null, ...storageResult.upload });
+    },
+    remove: (...args: unknown[]) => {
+      calls.push({ method: 'remove', args });
+      return Promise.resolve({ data: null, error: null, ...storageResult.remove });
+    },
+    createSignedUrl: (...args: unknown[]) => {
+      calls.push({ method: 'createSignedUrl', args });
+      return Promise.resolve({
+        data: { signedUrl: 'https://signed.example/img' },
+        error: null,
+        ...storageResult.createSignedUrl,
+      });
+    },
+  };
+
   const client = {
     from: (table: string) => {
       calls.push({ method: 'from', args: [table] });
@@ -45,9 +66,29 @@ function fakeClient(result: FakeResult = {}) {
       calls.push({ method: 'rpc', args: [fn, params] });
       return builder;
     },
+    auth: {
+      getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }),
+    },
+    storage: {
+      from: (bucket: string) => {
+        calls.push({ method: 'storage.from', args: [bucket] });
+        return storageBuilder;
+      },
+    },
   };
   return { client: client as unknown as SupabaseClient, calls };
 }
+
+/** Per-storage-method result overrides for the storage sub-client. */
+interface StorageResult {
+  upload?: FakeResult;
+  remove?: FakeResult;
+  createSignedUrl?: { data?: unknown; error?: { message: string } | null };
+}
+let storageResult: StorageResult = {};
+beforeEach(() => {
+  storageResult = {};
+});
 
 const entry: FoodEntry = {
   id: 'id-1',
@@ -112,6 +153,7 @@ const foodRow = {
   protein: 14,
   fat: 12,
   source: 'manual',
+  image_path: null,
 };
 
 const savedMeal: SavedMeal = {
@@ -322,6 +364,67 @@ describe('SupabaseRepository', () => {
       { method: 'from', args: ['foods'] },
       { method: 'update', args: [{ archived_at: expect.any(String) }] },
       { method: 'eq', args: ['id', 'food-1'] },
+    ]);
+  });
+
+  it('maps image_path to imagePath when loading foods', async () => {
+    const { client } = fakeClient({ data: [{ ...foodRow, image_path: 'user-1/food-1.jpg' }] });
+    const foods = await new SupabaseRepository(client).getFoods();
+    expect(foods[0].imagePath).toBe('user-1/food-1.jpg');
+  });
+
+  it('serializes imagePath to image_path when saving a food', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).addFood({ ...food, imagePath: 'user-1/food-1.jpg' });
+    const insert = calls.find((c) => c.method === 'insert');
+    expect((insert?.args[0] as { image_path: string }).image_path).toBe('user-1/food-1.jpg');
+  });
+
+  it('uploadFoodImage uploads to the owner-scoped key and records it on the row', async () => {
+    const { client, calls } = fakeClient();
+    const path = await new SupabaseRepository(client).uploadFoodImage('food-1', new Blob(['x']));
+
+    expect(path).toBe('user-1/food-1.jpg');
+    expect(calls).toEqual([
+      { method: 'storage.from', args: ['food-images'] },
+      { method: 'upload', args: ['user-1/food-1.jpg', expect.any(Blob), { upsert: true, contentType: 'image/jpeg' }] },
+      { method: 'from', args: ['foods'] },
+      { method: 'update', args: [{ image_path: 'user-1/food-1.jpg' }] },
+      { method: 'eq', args: ['id', 'food-1'] },
+    ]);
+  });
+
+  it('uploadFoodImage throws and skips the row write when the upload fails', async () => {
+    storageResult.upload = { error: { message: 'no space' } };
+    const { client, calls } = fakeClient();
+    await expect(
+      new SupabaseRepository(client).uploadFoodImage('food-1', new Blob(['x'])),
+    ).rejects.toThrow(/no space/);
+    // The foods row must not be updated when the object never landed.
+    expect(calls.some((c) => c.method === 'update')).toBe(false);
+  });
+
+  it('removeFoodImage deletes the object and nulls the row reference', async () => {
+    const { client, calls } = fakeClient();
+    await new SupabaseRepository(client).removeFoodImage('food-1');
+
+    expect(calls).toEqual([
+      { method: 'storage.from', args: ['food-images'] },
+      { method: 'remove', args: [['user-1/food-1.jpg']] },
+      { method: 'from', args: ['foods'] },
+      { method: 'update', args: [{ image_path: null }] },
+      { method: 'eq', args: ['id', 'food-1'] },
+    ]);
+  });
+
+  it('getFoodImageUrl returns a signed URL for the stored path', async () => {
+    const { client, calls } = fakeClient();
+    const url = await new SupabaseRepository(client).getFoodImageUrl('user-1/food-1.jpg');
+
+    expect(url).toBe('https://signed.example/img');
+    expect(calls).toEqual([
+      { method: 'storage.from', args: ['food-images'] },
+      { method: 'createSignedUrl', args: ['user-1/food-1.jpg', expect.any(Number)] },
     ]);
   });
 

@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { LibraryFood, SavedMeal } from '../types';
 
 export interface ComboboxGroup {
@@ -25,6 +25,8 @@ export interface FoodNameComboboxProps {
   actions: ComboboxAction[];
   onSelectFood: (food: LibraryFood) => void;
   onSelectMeal?: (meal: SavedMeal) => void;
+  /** Optional leading thumbnail for a food row; injected so this stays state-free. */
+  renderThumb?: (food: LibraryFood) => ReactNode;
   /** Focus the input on mount (opens the dropdown and, on mobile, the keyboard) */
   autoFocus?: boolean;
 }
@@ -47,6 +49,7 @@ export function FoodNameCombobox({
   actions,
   onSelectFood,
   onSelectMeal,
+  renderThumb,
   autoFocus = true,
 }: FoodNameComboboxProps) {
   const [open, setOpen] = useState(false);
@@ -129,9 +132,9 @@ export function FoodNameCombobox({
         // the list scrolls; keep the keyboard-highlighted option visible
         // (optional call: jsdom has no scrollIntoView)
         ref={i === activeIndex ? (el) => el?.scrollIntoView?.({ block: 'nearest' }) : undefined}
-        className={`combobox-option${option.kind === 'action' ? ' combobox-action' : ''}${
-          i === activeIndex ? ' active' : ''
-        }`}
+        className={`combobox-option${option.kind === 'food' ? ' combobox-option--food' : ''}${
+          option.kind === 'action' ? ' combobox-action' : ''
+        }${i === activeIndex ? ' active' : ''}`}
         // preventDefault keeps focus on the input so blur doesn't swallow the click
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
@@ -143,13 +146,16 @@ export function FoodNameCombobox({
       >
         {option.kind === 'food' ? (
           <>
-            <span className="combobox-option-name">
-              {option.food.name}
-              <span className="combobox-option-kcal"> · {option.food.calories} kcal</span>
+            {renderThumb?.(option.food)}
+            <span className="combobox-option-text">
+              <span className="combobox-option-name">
+                {option.food.name}
+                <span className="combobox-option-kcal"> · {option.food.calories} kcal</span>
+              </span>
+              {option.food.description && (
+                <span className="combobox-option-desc">{option.food.description}</span>
+              )}
             </span>
-            {option.food.description && (
-              <span className="combobox-option-desc">{option.food.description}</span>
-            )}
           </>
         ) : option.kind === 'meal' ? (
           <span className="combobox-option-name">
