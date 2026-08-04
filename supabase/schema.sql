@@ -173,6 +173,14 @@ alter table foods add column image_path text;
 --       bucket_id = 'food-images'
 --       and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- Suppresses the macro/calorie mismatch warning when this food is logged.
+-- Some foods (beer, liquor) have calories the tracked macros can't account
+-- for, so the warning would fire on every log. Set to true the first time the
+-- user saves a mismatched entry for the food anyway; thereafter that food logs
+-- without warning. Never snapshotted onto food_entries. Run in the dashboard
+-- BEFORE deploying app code that reads or writes it.
+alter table foods add column skip_macro_check boolean not null default false;
+
 -- Name-field suggestions: up to 5 foods most recently logged for the meal,
 -- then up to 5 most often logged for it, deduped across the two groups and
 -- excluding archived foods. security invoker (the default), so RLS on both

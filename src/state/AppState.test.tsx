@@ -45,6 +45,7 @@ const TACO_SALAD: SavedMeal = {
 
 class FakeRepository implements StorageRepository {
   addEntryCalls: FoodEntry[] = [];
+  addFoodCalls: LibraryFood[] = [];
   constructor(
     private foods: LibraryFood[] = [],
     private meals: SavedMeal[] = [],
@@ -70,7 +71,9 @@ class FakeRepository implements StorageRepository {
   async getFoods(): Promise<LibraryFood[]> {
     return this.foods;
   }
-  async addFood(): Promise<void> {}
+  async addFood(food: LibraryFood): Promise<void> {
+    this.addFoodCalls.push(food);
+  }
   async updateFood(): Promise<void> {}
   async archiveFood(): Promise<void> {}
   async uploadFoodImage(foodId: string): Promise<string> {
@@ -178,5 +181,61 @@ describe('logMeal', () => {
 
     expect(logged).toBe(0);
     expect(repository.addEntryCalls).toHaveLength(0);
+  });
+});
+
+describe('addEntry skip-macro-check capture seed', () => {
+  const newBeerInput = {
+    date: '2026-07-09',
+    meal: 'dinner' as const,
+    name: 'Modelo',
+    amount: 1,
+    unit: 'serving',
+    servingLabel: 'serving',
+    quantity: 1,
+    calories: 110,
+    carbs: 6,
+    protein: 1,
+    fat: 0,
+    source: 'manual' as const,
+    skipMacroCheck: true,
+  };
+
+  it('flags a brand-new captured food and keeps the flag off the entry', async () => {
+    const { repository, result } = await renderState([], []);
+
+    await act(async () => {
+      await result.current.addEntry(newBeerInput);
+    });
+
+    expect(repository.addFoodCalls).toHaveLength(1);
+    expect(repository.addFoodCalls[0]).toMatchObject({ name: 'Modelo', skipMacroCheck: true });
+    // The seed never rides along on the entry row.
+    expect(repository.addEntryCalls[0]).not.toHaveProperty('skipMacroCheck');
+  });
+
+  it('does not capture or modify a food when the name already exists', async () => {
+    const existingBeer: LibraryFood = {
+      id: 'food-beer',
+      name: 'Modelo',
+      servingLabel: 'serving',
+      calories: 110,
+      carbs: 6,
+      protein: 1,
+      fat: 0,
+      source: 'manual',
+    };
+    const { repository, result } = await renderState([existingBeer], []);
+
+    await act(async () => {
+      await result.current.addEntry(newBeerInput);
+    });
+
+    // Existing foods are never touched from the log form — the seed only ever
+    // flags a food captured on this save (the linked-food case is handled by
+    // the entry form via updateFood).
+    expect(repository.addFoodCalls).toHaveLength(0);
+    expect(repository.addEntryCalls[0]).toMatchObject({ foodId: 'food-beer' });
+    expect(repository.addEntryCalls[0]).not.toHaveProperty('skipMacroCheck');
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IdentifiedAmount } from '../api/identifyFood';
-import { checkMacroCalories } from '../lib/macroCheck';
+import { checkMacroCalories, macroMismatchMessage } from '../lib/macroCheck';
 import { findFoodByName, matchFoods, matchMeals } from '../lib/foodMatch';
 import { availableUnits, deriveQuantity, MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
@@ -291,7 +291,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const preview =
     previewQuantity !== null && values.calories.trim() !== '' && Number.isFinite(previewCalories)
       ? {
-          calories: round1(previewCalories * previewQuantity),
+          calories: Math.round(previewCalories * previewQuantity),
           fat: round1((Number(values.fat.trim()) || 0) * previewQuantity),
           carbs: round1((Number(values.carbs.trim()) || 0) * previewQuantity),
           protein: round1((Number(values.protein.trim()) || 0) * previewQuantity),
@@ -443,21 +443,24 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     setEstimateHandoff(null);
   }
 
-  /** Returns false when the user backs out of a macro/calorie mismatch. */
-  function confirmMacroMismatch(parsed: {
+  /**
+   * Resolves a macro/calorie mismatch. `proceed` is false when the user backs
+   * out. `consented` is true when the user chose "Save anyway" on a real
+   * mismatch, so the linked or captured food should be flagged to skip the
+   * warning next time. A linked food already flagged never prompts; quick
+   * entries never link a food, so they are never suppressed.
+   */
+  function resolveMacroMismatch(parsed: {
     calories: number;
     carbs: number;
     protein: number;
     fat: number;
-  }): boolean {
+  }): { proceed: boolean; consented: boolean } {
     const mismatch = checkMacroCalories(parsed.calories, parsed.carbs, parsed.protein, parsed.fat);
-    return (
-      !mismatch ||
-      window.confirm(
-        `The carbs, protein, and fat add up to about ${mismatch.expected} kcal, but you entered ` +
-          `${mismatch.entered} kcal. Save anyway?`,
-      )
-    );
+    if (!mismatch) return { proceed: true, consented: false };
+    if (!quick && matchedFood?.skipMacroCheck) return { proceed: true, consented: false };
+    const proceed = window.confirm(macroMismatchMessage(mismatch));
+    return { proceed, consented: proceed };
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -475,7 +478,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         setErrors(result.errors);
         return;
       }
-      if (!confirmMacroMismatch(result.parsed)) return;
+      // Quick entries never link a food, so a mismatch is never suppressed and
+      // nothing is ever flagged — only the proceed/back-out decision matters.
+      if (!resolveMacroMismatch(result.parsed).proceed) return;
       setErrors({});
       setSaving(true);
       setSaveFailed(false);
@@ -510,7 +515,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
       return;
     }
 
-    if (!confirmMacroMismatch(result.parsed)) return;
+    const { proceed, consented } = resolveMacroMismatch(result.parsed);
+    if (!proceed) return;
 
     setErrors({});
     setAnchorErrors({});
@@ -531,18 +537,32 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           foodId,
           description: description.trim() || undefined,
           recipe: recipe.trim() || undefined,
+          // A brand-new (unmatched) food is flagged as it is captured; an
+          // already-linked food is flagged via updateFood below.
+          skipMacroCheck: consented && !matchedFood ? true : undefined,
         });
       }
-      if (showLibraryAnchorEditor && matchedFood) {
-        await updateFood({
-          ...matchedFood,
-          servingLabel: anchor.servingLabel,
-          servingSize: anchor.servingSize,
-          calories: result.parsed.calories,
-          carbs: result.parsed.carbs,
-          protein: result.parsed.protein,
-          fat: result.parsed.fat,
-        });
+      // Update the linked library food when the anchor editor changed it and/or
+      // the user consented to a mismatch — merged into a single write.
+      if (matchedFood) {
+        const anchorUpdate = showLibraryAnchorEditor
+          ? {
+              servingLabel: anchor.servingLabel,
+              servingSize: anchor.servingSize,
+              calories: result.parsed.calories,
+              carbs: result.parsed.carbs,
+              protein: result.parsed.protein,
+              fat: result.parsed.fat,
+            }
+          : null;
+        const needsFlag = consented && !matchedFood.skipMacroCheck;
+        if (anchorUpdate || needsFlag) {
+          await updateFood({
+            ...matchedFood,
+            ...anchorUpdate,
+            ...(needsFlag ? { skipMacroCheck: true } : {}),
+          });
+        }
       }
       onClose();
     } catch {

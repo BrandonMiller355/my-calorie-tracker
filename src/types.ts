@@ -76,6 +76,12 @@ export interface LibraryFood extends ServingAnchor {
    * display through a short-lived signed URL, never a public URL.
    */
   imagePath?: string;
+  /**
+   * When set, the macro/calorie mismatch warning is suppressed for this food
+   * (per food-logging). Off by default; set the first time the user saves a
+   * mismatched entry for this food anyway.
+   */
+  skipMacroCheck?: boolean;
 }
 
 /**
