@@ -28,7 +28,7 @@ The identify flow SHALL obtain its photo through the same photo source selection
 - **THEN** no request is sent and the entry form is exactly as they left it
 
 ### Requirement: Server-proxied identification with a protected API key
-The system SHALL identify photos through a dedicated `identify-food` Supabase Edge Function that holds the AI provider's API key (Gemini) as a server-side secret and rejects requests without a valid Supabase session JWT. Each request SHALL carry the photo, the optional context note, and the user's non-archived library foods (id, name, optional description, and serving-weight information); archived foods MUST NOT be sent or matched. The function MUST be stateless: the photo, note, library payload, and result MUST NOT be persisted server-side, and the client SHALL discard them when the identify flow closes.
+The system SHALL identify photos through a dedicated `identify-food` Supabase Edge Function that holds the AI provider's API key (Gemini) as a server-side secret and rejects requests without a valid Supabase session JWT. Each request SHALL carry the photo, the optional context note, and the user's non-archived library foods (id, name, optional description, and serving-weight information); archived foods MUST NOT be sent or matched. The function MUST be stateless: the photo, note, library payload, and result MUST NOT be persisted server-side, and the client SHALL discard the note, the library payload, and the candidates when the identify flow closes. The photo is likewise discarded, except that when the flow resolves to a matched library food with no existing image, the client MAY upload that photo to the user's own food-image storage as that food's image per the food-library-photos auto-attach behavior; no note, candidate, or library payload is ever persisted.
 
 #### Scenario: Authenticated user requests identification
 - **WHEN** a signed-in user sends a photo for identification
@@ -42,9 +42,13 @@ The system SHALL identify photos through a dedicated `identify-food` Supabase Ed
 - **WHEN** the user's library contains archived foods
 - **THEN** those foods are not included in the request and can never be returned as candidates
 
-#### Scenario: Nothing persisted
+#### Scenario: Nothing persisted server-side
 - **WHEN** the identify flow closes (by filling the form, cancelling, or navigating away)
-- **THEN** the photo, note, and candidates are discarded and nothing about them is stored anywhere
+- **THEN** the Edge Function has stored nothing, and the client discards the note, library payload, and candidates
+
+#### Scenario: Only a matched food's own image may persist client-side
+- **WHEN** the flow resolves to a matched library food that has no image
+- **THEN** the only thing that may be stored is that photo, uploaded to the user's own food-image storage as that food's image; the note, candidates, and library payload are still discarded
 
 ### Requirement: Ranked candidate identification
 The identification SHALL return between zero and three candidate library-food ids, ranked with a confidence value: exactly one candidate when the model is confident, two or three when it is torn between plausible library foods, and none when no library food plausibly matches. Every returned id MUST be one of the ids submitted in the request; ids that are not MUST be discarded by server-side revalidation.
@@ -131,3 +135,22 @@ When an identification request fails (network error, provider error, or malforme
 #### Scenario: Request fails
 - **WHEN** the identification request fails
 - **THEN** an error message with a retry action is shown, and the form remains untouched behind it
+
+### Requirement: Auto-attach the identify photo on a confirmed match
+When the identify flow resolves to a library food — whether by a confident single match or by the user picking a candidate from the chooser — and that food has no photo yet, the system SHALL attach the identify photo to that food as its image. Auto-attach SHALL use the photo already captured for identification (no re-capture) and MUST NOT overwrite an image the food already has. Auto-attach SHALL be non-blocking per the food-library-photos capability: it MUST NOT delay or block prefilling the form or logging the entry, and a failed attach MUST NOT affect the match, the prefilled form, or the logged entry. A no-match result or a cancelled flow SHALL attach nothing.
+
+#### Scenario: Confident match on an image-less food attaches the photo
+- **WHEN** identification returns exactly one candidate and that library food has no photo
+- **THEN** the identify photo is attached to that food as its image, without blocking the form prefill
+
+#### Scenario: Chosen candidate on an image-less food attaches the photo
+- **WHEN** the user picks a candidate from the chooser and that food has no photo
+- **THEN** the identify photo is attached to that food as its image
+
+#### Scenario: Match on a food that already has a photo leaves it unchanged
+- **WHEN** the flow resolves to a food that already has a photo
+- **THEN** its existing photo is preserved and the identify photo is not stored
+
+#### Scenario: No match attaches nothing
+- **WHEN** identification returns no candidates, or the user cancels before a match resolves
+- **THEN** no image is attached to any food

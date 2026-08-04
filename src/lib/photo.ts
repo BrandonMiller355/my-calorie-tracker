@@ -24,6 +24,16 @@ export function captureFrame(video: HTMLVideoElement): string | null {
   return downscaleToJpeg(video, video.videoWidth, video.videoHeight);
 }
 
+/** Decodes a base64 data URL (as produced above) into a Blob for upload. */
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64 = ''] = dataUrl.split(',');
+  const mime = /data:(.*?)(;base64)?$/.exec(header)?.[1] || 'application/octet-stream';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 /**
  * Loads an image file and downscales it the same way a camera frame is.
  * Resolves to null (not rejects) if the source has no readable dimensions;

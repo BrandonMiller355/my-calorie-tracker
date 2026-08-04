@@ -29,6 +29,7 @@ import type { ResolvedTextLogItem } from '../api/logFromText';
 import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
 import { BulkPhotoOverlay } from './BulkPhotoOverlay';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
+import { FoodThumbnail } from './FoodThumbnail';
 import { IdentifyOverlay } from './IdentifyOverlay';
 import { LogMealSheet } from './LogMealSheet';
 import { TextLogOverlay } from './TextLogOverlay';
@@ -124,7 +125,7 @@ function ServingAnchorFields({
 }
 
 export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: EntryFormProps) {
-  const { addEntry, updateEntry, updateFood, foods, meals, foodLastUsed, getMealSuggestions } =
+  const { addEntry, updateEntry, updateFood, setFoodImage, foods, meals, foodLastUsed, getMealSuggestions } =
     useAppState();
   const navigate = useNavigate();
   const nameInputId = useId();
@@ -370,8 +371,12 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   }
 
   /** An identify match fills the form like a combobox pick, plus the weight when usable. */
-  function handleIdentified(food: LibraryFood, amount?: IdentifiedAmount) {
+  function handleIdentified(food: LibraryFood, amount: IdentifiedAmount | undefined, image: string) {
     selectFood(food);
+    // Auto-attach the identify photo to a matched food that has no image yet.
+    // Fire-and-forget so it never delays the prefill or the eventual log, and
+    // never overwrites an existing photo.
+    if (!food.imagePath) void setFoodImage(food.id, image);
     // Grams only drive the amount when the food's anchor can convert them
     const units = availableUnits({ servingLabel: food.servingLabel, servingSize: food.servingSize });
     if (amount && units.includes('g')) {
@@ -634,38 +639,46 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             inside the <label>, or its options become part of the field's name */
         <div className="field">
           <label htmlFor={nameInputId}>Name</label>
-          <FoodNameCombobox
-            inputId={nameInputId}
-            value={values.name}
-            onChange={(name) => {
-              setField('name', name);
-              setFoodId(undefined);
-            }}
-            groups={groups}
-            meals={mealMatches}
-            actions={actions}
-            onSelectFood={selectFood}
-            onSelectMeal={setLoggingMeal}
-            // A prefilled or edited name is settled; don't pop the dropdown
-            // and mobile keyboard until the user taps the field themselves
-            autoFocus={!editing && !prefill}
-          />
-          {errors.name && <span className="field-error">{errors.name}</span>}
-          {matchedFood?.description && (
-            <span className="combobox-selected-desc">{matchedFood.description}</span>
-          )}
-          {matchedFood?.recipe && (
-            <>
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => setViewingRecipe((v) => !v)}
-              >
-                {viewingRecipe ? 'Hide recipe' : 'View recipe'}
-              </button>
-              {viewingRecipe && <p className="food-recipe">{matchedFood.recipe}</p>}
-            </>
-          )}
+          <div className="name-field-row">
+            {matchedFood?.imagePath && (
+              <FoodThumbnail food={matchedFood} className="name-field-thumb" enlargeable />
+            )}
+            <div className="name-field-body">
+              <FoodNameCombobox
+                inputId={nameInputId}
+                value={values.name}
+                onChange={(name) => {
+                  setField('name', name);
+                  setFoodId(undefined);
+                }}
+                groups={groups}
+                meals={mealMatches}
+                actions={actions}
+                onSelectFood={selectFood}
+                onSelectMeal={setLoggingMeal}
+                renderThumb={(food) => <FoodThumbnail food={food} className="combobox-thumb" />}
+                // A prefilled or edited name is settled; don't pop the dropdown
+                // and mobile keyboard until the user taps the field themselves
+                autoFocus={!editing && !prefill}
+              />
+              {errors.name && <span className="field-error">{errors.name}</span>}
+              {matchedFood?.description && (
+                <span className="combobox-selected-desc">{matchedFood.description}</span>
+              )}
+              {matchedFood?.recipe && (
+                <>
+                  <button
+                    type="button"
+                    className="link-button name-field-recipe-toggle"
+                    onClick={() => setViewingRecipe((v) => !v)}
+                  >
+                    {viewingRecipe ? 'Hide recipe' : 'View recipe'}
+                  </button>
+                  {viewingRecipe && <p className="food-recipe">{matchedFood.recipe}</p>}
+                </>
+              )}
+            </div>
+          </div>
         </div>
         )}
 

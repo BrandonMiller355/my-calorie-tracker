@@ -98,6 +98,11 @@ function fromRow(row: FoodEntryRow): FoodEntry {
   };
 }
 
+/** Private Storage bucket holding one downscaled JPEG per food. */
+const FOOD_IMAGE_BUCKET = 'food-images';
+/** Signed-URL lifetime for displaying a food photo, in seconds. */
+const FOOD_IMAGE_URL_TTL = 60 * 60;
+
 /** Row shape of the foods table; also what meal_suggestions() returns per food. */
 interface FoodRow extends AnchorColumns {
   id: string;
@@ -109,6 +114,7 @@ interface FoodRow extends AnchorColumns {
   protein: number;
   fat: number;
   source: LibraryFood['source'];
+  image_path: string | null;
   skip_macro_check: boolean;
 }
 
@@ -124,6 +130,7 @@ function toFoodRow(food: LibraryFood): FoodRow {
     protein: food.protein,
     fat: food.fat,
     source: food.source,
+    image_path: food.imagePath ?? null,
     skip_macro_check: food.skipMacroCheck ?? false,
   };
 }
@@ -140,6 +147,7 @@ function fromFoodRow(row: FoodRow): LibraryFood {
     protein: row.protein,
     fat: row.fat,
     source: row.source,
+    imagePath: row.image_path ?? undefined,
     skipMacroCheck: row.skip_macro_check || undefined,
   };
 }
@@ -254,6 +262,48 @@ export class SupabaseRepository implements StorageRepository {
       .update({ archived_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw new Error(`Archiving food failed: ${error.message}`);
+  }
+
+  /** The signed-in user's id, used as the owner segment of image object keys. */
+  private async userId(): Promise<string> {
+    const { data, error } = await this.client.auth.getUser();
+    if (error || !data.user) throw new Error('Not signed in');
+    return data.user.id;
+  }
+
+  /** Owner-scoped object key for a food's photo: `${uid}/${foodId}.jpg`. */
+  private async imageKey(foodId: string): Promise<string> {
+    return `${await this.userId()}/${foodId}.jpg`;
+  }
+
+  async uploadFoodImage(foodId: string, blob: Blob): Promise<string> {
+    const path = await this.imageKey(foodId);
+    // upsert so replacing a photo overwrites the single object for this food.
+    const { error: uploadError } = await this.client.storage
+      .from(FOOD_IMAGE_BUCKET)
+      .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+    if (uploadError) throw new Error(`Uploading food image failed: ${uploadError.message}`);
+    const { error } = await this.client.from('foods').update({ image_path: path }).eq('id', foodId);
+    if (error) throw new Error(`Saving food image reference failed: ${error.message}`);
+    return path;
+  }
+
+  async removeFoodImage(foodId: string): Promise<void> {
+    const path = await this.imageKey(foodId);
+    const { error: removeError } = await this.client.storage
+      .from(FOOD_IMAGE_BUCKET)
+      .remove([path]);
+    if (removeError) throw new Error(`Removing food image failed: ${removeError.message}`);
+    const { error } = await this.client.from('foods').update({ image_path: null }).eq('id', foodId);
+    if (error) throw new Error(`Clearing food image reference failed: ${error.message}`);
+  }
+
+  async getFoodImageUrl(path: string): Promise<string> {
+    const { data, error } = await this.client.storage
+      .from(FOOD_IMAGE_BUCKET)
+      .createSignedUrl(path, FOOD_IMAGE_URL_TTL);
+    if (error || !data) throw new Error(`Signing food image URL failed: ${error?.message ?? 'no url'}`);
+    return data.signedUrl;
   }
 
   async getMeals(): Promise<SavedMeal[]> {

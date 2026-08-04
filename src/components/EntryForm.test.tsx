@@ -27,6 +27,7 @@ vi.mock('../lib/supabase', () => ({
 const stubIdentify = vi.hoisted(() => ({
   food: null as unknown as LibraryFood,
   amount: undefined as IdentifiedAmount | undefined,
+  image: 'data:image/jpeg;base64,identify',
 }));
 
 vi.mock('./IdentifyOverlay', () => ({
@@ -35,12 +36,14 @@ vi.mock('./IdentifyOverlay', () => ({
     onEstimateFallback,
     onCancel,
   }: {
-    onMatch: (food: LibraryFood, amount?: IdentifiedAmount) => void;
+    onMatch: (food: LibraryFood, amount: IdentifiedAmount | undefined, image: string) => void;
     onEstimateFallback: (image: string, note: string) => void;
     onCancel: () => void;
   }) => (
     <div data-testid="identify-overlay">
-      <button onClick={() => onMatch(stubIdentify.food, stubIdentify.amount)}>stub-match</button>
+      <button onClick={() => onMatch(stubIdentify.food, stubIdentify.amount, stubIdentify.image)}>
+        stub-match
+      </button>
       <button onClick={() => onEstimateFallback('data:image/jpeg;base64,handoff', 'my note')}>
         stub-fallback
       </button>
@@ -171,6 +174,7 @@ class FakeRepository implements StorageRepository {
   updateEntryCalls: unknown[] = [];
   updateFoodCalls: unknown[] = [];
   addFoodCalls: unknown[] = [];
+  imageUploads: { foodId: string; blob: Blob }[] = [];
   library: LibraryFood[] = [CHICKEN, COOKIE];
   meals: SavedMeal[] = [];
   lastUsed: Record<string, string> = {};
@@ -204,6 +208,14 @@ class FakeRepository implements StorageRepository {
     this.updateFoodCalls.push(food);
   }
   async archiveFood(): Promise<void> {}
+  async uploadFoodImage(foodId: string, blob: Blob): Promise<string> {
+    this.imageUploads.push({ foodId, blob });
+    return `uid/${foodId}.jpg`;
+  }
+  async removeFoodImage(): Promise<void> {}
+  async getFoodImageUrl(path: string): Promise<string> {
+    return `signed:${path}`;
+  }
   async getMeals(): Promise<SavedMeal[]> {
     return this.meals;
   }
@@ -362,6 +374,28 @@ describe('EntryForm identify action', () => {
     });
     expect(repository.updateFoodCalls).toHaveLength(0);
     expect(repository.addFoodCalls).toHaveLength(0);
+  });
+
+  it('auto-attaches the identify photo to a matched food that has no image', async () => {
+    const repository = await renderForm();
+
+    openIdentify();
+    fireEvent.click(screen.getByText('stub-match'));
+
+    await waitFor(() => expect(repository.imageUploads).toHaveLength(1));
+    expect(repository.imageUploads[0].foodId).toBe(CHICKEN.id);
+  });
+
+  it('does not attach when the matched food already has an image', async () => {
+    stubIdentify.food = { ...CHICKEN, imagePath: 'uid/chicken.jpg' };
+    const repository = await renderForm();
+
+    openIdentify();
+    fireEvent.click(screen.getByText('stub-match'));
+    // Give any (unwanted) fire-and-forget upload a chance to run.
+    await act(async () => {});
+
+    expect(repository.imageUploads).toHaveLength(0);
   });
 });
 

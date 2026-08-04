@@ -1223,6 +1223,28 @@ a:hover {
   background: var(--brand-tint);
 }
 
+/* Food rows lay out as [thumbnail][text]; rows without a photo look unchanged. */
+.combobox-option--food {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.combobox-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.combobox-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
 .combobox-option-name {
   font-weight: 600;
   color: var(--ink);
@@ -1271,6 +1293,33 @@ a:hover {
 
 .combobox-selected-desc {
   margin: 0;
+}
+
+/* Log screen: selected food's photo lined up beside its name input + description. */
+.name-field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.name-field-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.name-field-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--r-card-s);
+  flex-shrink: 0;
+}
+
+.name-field-recipe-toggle {
+  align-self: flex-start;
 }
 
 .combobox-action {
@@ -1593,6 +1642,7 @@ input[type='search']::-webkit-search-cancel-button {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
   align-items: flex-start;
 }
 
@@ -2264,6 +2314,150 @@ input[type='search']::-webkit-search-cancel-button {
   object-fit: cover;
   border-radius: var(--r-card-s);
   flex-shrink: 0;
+}
+
+/* Library-row thumbnail for a food's photo. */
+.food-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: var(--r-card-s);
+  flex-shrink: 0;
+}
+
+/* Reset wrapper so a thumbnail can be clicked to enlarge without button chrome. */
+.food-thumb-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: 0;
+  cursor: zoom-in;
+  flex-shrink: 0;
+  border-radius: var(--r-card-s);
+}
+
+.food-thumb-button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Full-screen enlarged view of a food photo. */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.8);
+  cursor: zoom-out;
+}
+
+.image-lightbox-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: var(--r-card-s);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Edit-food identity header: photo + name/description grouped in one panel. */
+.food-edit-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--surface-tint);
+  border-radius: var(--r-card-s);
+}
+
+.food-edit-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.food-photo-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.food-recipe-toggle {
+  font-size: 12px;
+}
+
+.food-photo-block {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+}
+
+.food-photo-preview {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: var(--r-card-s);
+  box-shadow: 0 0 0 1px var(--card-border);
+}
+
+/* Edit/delete icons — shown only on the enlarged view, over its top-right. */
+.image-lightbox-figure {
+  position: relative;
+  display: inline-flex;
+}
+
+.image-lightbox-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.food-photo-icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.food-photo-icon:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* Empty state: a single add-photo affordance in place of the image. */
+.food-photo-add {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--c-text-dim);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-card-s);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.food-photo-add:hover {
+  border-color: var(--brand);
 }
 
 .bulk-photo-fields {

@@ -52,6 +52,9 @@ const PORK: LibraryFood = {
 
 const FOODS = [CHICKEN, PORK];
 
+/** The data URL the PhotoCapture stub emits, passed on to onMatch for attach. */
+const IMG = 'data:image/jpeg;base64,test';
+
 function capture() {
   fireEvent.click(screen.getByText('stub-capture'));
 }
@@ -115,7 +118,7 @@ describe('IdentifyOverlay', () => {
     send();
 
     await vi.waitFor(() => expect(onMatch).toHaveBeenCalledTimes(1));
-    expect(onMatch).toHaveBeenCalledWith(CHICKEN, { grams: 142, source: 'scale' });
+    expect(onMatch).toHaveBeenCalledWith(CHICKEN, { grams: 142, source: 'scale' }, IMG);
   });
 
   it('shows a chooser for multiple candidates and resolves the picked one', async () => {
@@ -140,7 +143,7 @@ describe('IdentifyOverlay', () => {
 
     fireEvent.click(screen.getByText('Pork chop'));
 
-    expect(onMatch).toHaveBeenCalledWith(PORK, { grams: 130, source: 'estimate' });
+    expect(onMatch).toHaveBeenCalledWith(PORK, { grams: 130, source: 'estimate' }, IMG);
   });
 
   it('dismissing the chooser cancels without a match', async () => {
@@ -239,7 +242,7 @@ describe('IdentifyOverlay', () => {
     identifyFoodMock.mockResolvedValue({ candidates: [{ id: CHICKEN.id, confidence: 0.9 }] });
     fireEvent.click(screen.getByText('Retry'));
 
-    await vi.waitFor(() => expect(onMatch).toHaveBeenCalledWith(CHICKEN, undefined));
+    await vi.waitFor(() => expect(onMatch).toHaveBeenCalledWith(CHICKEN, undefined, IMG));
     expect(identifyFoodMock).toHaveBeenCalledTimes(2);
   });
 
