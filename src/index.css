@@ -1757,9 +1757,38 @@ input[type='search']::-webkit-search-cancel-button {
   accent-color: var(--brand);
 }
 
+/* Chips for the foods picked so far — they survive clearing the search, so the
+   selection is never invisible. */
+.selected-chips {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--brand);
+  border-radius: var(--r-pill);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font: 600 13px/1 var(--font);
+  cursor: pointer;
+}
+
+.selected-chip span {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* The select-mode list is short by construction, so this rides just below it
+   rather than sticking to the viewport. */
 .select-footer {
-  position: sticky;
-  bottom: 12px;
   margin-top: 12px;
 }
 

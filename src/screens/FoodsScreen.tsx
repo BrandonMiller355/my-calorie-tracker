@@ -488,6 +488,8 @@ export function FoodsScreen() {
       ? [...foods].sort((a, b) => a.name.localeCompare(b.name))
       : matchFoods(foods, query);
 
+  const selectedFoods = foods.filter((f) => selected.has(f.id));
+
   function handleArchive(food: LibraryFood) {
     if (
       !window.confirm(
@@ -561,7 +563,7 @@ export function FoodsScreen() {
 
           {selecting && (
             <div className="select-banner">
-              <p>Tick the foods to combine, then tap “Create meal”.</p>
+              <p>Search for each food you want in the meal and tick it.</p>
               <button type="button" className="link-button" onClick={exitSelecting}>
                 Cancel
               </button>
@@ -578,15 +580,45 @@ export function FoodsScreen() {
             <input
               className="search-input"
               type="search"
-              placeholder={selecting ? 'Filter foods to combine' : 'Filter your library'}
+              placeholder={
+                selecting ? 'Search a food to add to the meal' : 'Filter your library'
+              }
               aria-label="Filter your library"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           )}
 
+          {/* The picked foods stay listed even when the search that found them is
+              cleared — the only place they are visible once the list is empty. */}
+          {selecting && selectedFoods.length > 0 && (
+            <ul className="selected-chips">
+              {selectedFoods.map((food) => (
+                <li key={food.id}>
+                  <button
+                    type="button"
+                    className="selected-chip"
+                    aria-label={`Unselect ${food.name}`}
+                    onClick={() => toggleSelected(food.id)}
+                  >
+                    {food.name}
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
           {foods.length === 0 ? (
             <p className="search-hint">Nothing here yet — foods appear as you log them.</p>
+          ) : selecting && query.trim() === '' ? (
+            // In select mode the whole library is noise: nothing is listed until
+            // the search narrows it, which keeps the create button on screen.
+            selected.size < 2 && (
+              <p className="search-hint">
+                Search above for the foods to combine — pick at least two.
+              </p>
+            )
           ) : visible.length === 0 ? (
             <p className="search-hint">No foods match “{query.trim()}”.</p>
           ) : (
@@ -644,7 +676,7 @@ export function FoodsScreen() {
             </ul>
           )}
 
-          {selecting && (
+          {selecting && (query.trim() !== '' || selected.size >= 2) && (
             <div className="select-footer">
               <button
                 type="button"
