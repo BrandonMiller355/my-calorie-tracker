@@ -879,6 +879,14 @@ a:hover {
   border-top: 1px solid var(--divider);
 }
 
+.entry-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: var(--r-card-s);
+  flex-shrink: 0;
+}
+
 .entry-main {
   flex: 1;
   min-width: 0;

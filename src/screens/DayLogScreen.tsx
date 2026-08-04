@@ -29,6 +29,7 @@ export function DayLogScreen() {
     date,
     entries,
     entriesLoading,
+    foods,
     goals,
     goalsAreDefault,
     dayGoalIsOverridden,
@@ -121,6 +122,7 @@ export function DayLogScreen() {
             key={meal}
             meal={meal}
             entries={entries.filter((e) => e.meal === meal)}
+            foods={foods}
             open={mealOpenOverrides[meal] ?? MEALS.indexOf(meal) >= MEALS.indexOf(nowMeal)}
             onToggle={() =>
               setMealOpenOverrides((prev) => ({

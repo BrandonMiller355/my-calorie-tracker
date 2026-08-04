@@ -1,10 +1,12 @@
 import { entryTotals } from '../lib/totals';
 import { unitLabel } from '../lib/units';
-import { MEAL_LABELS, type FoodEntry, type Meal } from '../types';
+import { MEAL_LABELS, type FoodEntry, type LibraryFood, type Meal } from '../types';
+import { FoodThumbnail } from './FoodThumbnail';
 
 export function MealSection({
   meal,
   entries,
+  foods = [],
   onAdd,
   onEdit,
   onDelete,
@@ -14,6 +16,8 @@ export function MealSection({
 }: {
   meal: Meal;
   entries: FoodEntry[];
+  /** The food library, used to show each entry's linked food photo. */
+  foods?: LibraryFood[];
   onAdd: () => void;
   onEdit: (entry: FoodEntry) => void;
   onDelete: (id: string) => void;
@@ -24,6 +28,7 @@ export function MealSection({
   isNow?: boolean;
 }) {
   const subtotal = Math.round(entries.reduce((sum, e) => sum + entryTotals(e).calories, 0));
+  const foodById = new Map(foods.map((f) => [f.id, f]));
 
   return (
     <section
@@ -58,8 +63,12 @@ export function MealSection({
             {entries.map((entry) => {
               const t = entryTotals(entry);
               const showQty = !(entry.amount === 1 && entry.unit === entry.servingLabel);
+              const food = entry.foodId ? foodById.get(entry.foodId) : undefined;
               return (
                 <li key={entry.id} className="entry-row">
+                  {food?.imagePath && (
+                    <FoodThumbnail food={food} className="entry-thumb" enlargeable />
+                  )}
                   <button className="entry-main" onClick={() => onEdit(entry)}>
                     <span className="entry-name">{entry.name}</span>
                     <span className="entry-caption">
