@@ -5,10 +5,12 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { startOfWeek, todayKey } from '../lib/date';
+import { useRefreshOnReturn } from '../lib/useRefreshOnReturn';
 import { findFoodByName } from '../lib/foodMatch';
 import { resolveMeal } from '../lib/meal';
 import { computeWeeklyDeficit } from '../lib/weeklyDeficit';
@@ -398,6 +400,30 @@ export function AppProvider({
     dispatch({ type: 'retry-load' });
     setReloadKey((k) => k + 1);
   }, []);
+
+  /** The calendar day the app currently treats as today; advances at midnight. */
+  const currentDay = useRef(todayKey());
+
+  // Reloads everything after the app has been away for a while. Silent by
+  // design: the loading flags are left alone so returning to the tab swaps the
+  // data in underneath rather than blanking the log out behind a skeleton.
+  const refreshStaleData = useCallback(() => {
+    const today = todayKey();
+    if (today !== currentDay.current) {
+      const rolledFrom = currentDay.current;
+      currentDay.current = today;
+      // A tab left open past midnight still holds the old day, so an entry
+      // logged after returning would land on it. Only a user sitting on what
+      // used to be today is moved forward; a deliberately picked past date stays.
+      if (state.date === rolledFrom) dispatch({ type: 'set-date', date: today });
+    }
+    // The error screen is the one case worth a skeleton, since there is no
+    // stale content behind it to preserve and retrying should look like work.
+    if (state.loadFailed) dispatch({ type: 'retry-load' });
+    setReloadKey((k) => k + 1);
+  }, [state.date, state.loadFailed]);
+
+  useRefreshOnReturn(refreshStaleData);
 
   const addEntry = useCallback(
     async (input: NewEntryInput) => {
