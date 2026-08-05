@@ -1,3 +1,5 @@
+import { ClearableTextarea } from './ClearableInput';
+
 /**
  * Pre-send photo review, shared by the AI analyze and identify flows: the
  * frozen captured frame, an optional context note for the model, and
@@ -30,13 +32,14 @@ export function PhotoConfirm({
         <label htmlFor="ai-note" className="ai-refine-label">
           Add context for the AI (optional), e.g. “I didn’t eat the ranch”
         </label>
-        <textarea
+        <ClearableTextarea
           id="ai-note"
           className="ai-note-input"
           value={note}
           onChange={(e) => onNoteChange(e.target.value)}
           placeholder="Anything the photo doesn't show?"
           rows={2}
+          clearLabel="Clear note"
         />
         <div className="ai-confirm-actions">
           <button type="button" className="secondary" onClick={onRetake}>

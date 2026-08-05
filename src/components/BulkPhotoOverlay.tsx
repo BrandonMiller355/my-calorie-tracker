@@ -6,6 +6,7 @@ import { round1 } from '../lib/totals';
 import { availableUnits, deriveQuantity, unitLabel } from '../lib/units';
 import { useAppState } from '../state/AppState';
 import { MEALS, MEAL_LABELS, type LibraryFood, type Meal } from '../types';
+import { NumberInput } from './NumberInput';
 
 /** Bound on photos per batch; keeps memory and sequential request count sane. */
 export const MAX_BATCH_PHOTOS = 10;
@@ -436,8 +437,7 @@ export function BulkPhotoOverlay({ foods, date, meal, onLogged, onCancel }: Bulk
                       </span>
                     )}
                     <div className="text-log-item-fields">
-                      <input
-                        inputMode="decimal"
+                      <NumberInput
                         value={row.amountText}
                         onChange={(e) =>
                           setRow(row.key, { amountText: e.target.value, estimatedWeight: false })

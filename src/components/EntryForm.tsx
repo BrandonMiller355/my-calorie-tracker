@@ -28,10 +28,12 @@ import {
 import type { ResolvedTextLogItem } from '../api/logFromText';
 import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
 import { BulkPhotoOverlay } from './BulkPhotoOverlay';
+import { ClearableInput, ClearableTextarea } from './ClearableInput';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
 import { FoodThumbnail } from './FoodThumbnail';
 import { IdentifyOverlay } from './IdentifyOverlay';
 import { LogMealSheet } from './LogMealSheet';
+import { NumberInput } from './NumberInput';
 import { TextLogOverlay } from './TextLogOverlay';
 
 export interface EntryFormProps {
@@ -84,16 +86,16 @@ function ServingAnchorFields({
       <div className="serving-def-row">
         <label>
           Serving name
-          <input
+          <ClearableInput
             value={values.servingLabel}
             onChange={(e) => onChange('servingLabel', e.target.value)}
             placeholder={DEFAULT_SERVING_LABEL}
+            clearLabel="Clear serving name"
           />
         </label>
         <label>
           Equals
-          <input
-            inputMode="decimal"
+          <NumberInput
             value={values.servingSizeAmount}
             onChange={(e) => onChange('servingSizeAmount', e.target.value)}
             placeholder="e.g. 120"
@@ -686,21 +688,23 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           <>
             <label>
               Description (optional)
-              <input
+              <ClearableInput
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brand, prep, weights — saved to your food library"
+                clearLabel="Clear description"
               />
             </label>
 
             {recipeOpen ? (
               <label>
                 Recipe (optional)
-                <textarea
+                <ClearableTextarea
                   value={recipe}
                   onChange={(e) => setRecipe(e.target.value)}
                   placeholder="Prep steps — saved to your food library"
                   rows={4}
+                  clearLabel="Clear recipe"
                 />
               </label>
             ) : (
@@ -737,9 +741,8 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         <div className="field">
           <label htmlFor={amountInputId}>Amount</label>
           <div className="amount-unit">
-            <input
+            <NumberInput
               id={amountInputId}
-              inputMode="decimal"
               value={values.amount}
               onChange={(e) => setField('amount', e.target.value)}
             />
@@ -801,8 +804,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           <>
             <label>
               {CALORIE_FIELD.label}
-              <input
-                inputMode="decimal"
+              <NumberInput
                 value={values[CALORIE_FIELD.key]}
                 onChange={(e) => setField(CALORIE_FIELD.key, e.target.value)}
                 autoFocus={!editing}
@@ -816,8 +818,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
               {NUTRIENT_FIELDS.map(({ key, label }) => (
                 <label key={key}>
                   {label}
-                  <input
-                    inputMode="decimal"
+                  <NumberInput
                     value={values[key]}
                     onChange={(e) => setField(key, e.target.value)}
                   />
@@ -828,10 +829,11 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
 
             <label>
               Description (optional)
-              <input
+              <ClearableInput
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="What was it — e.g. wedding buffet"
+                clearLabel="Clear description"
               />
             </label>
           </>
@@ -851,8 +853,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             <label>
               {CALORIE_FIELD.label}
               <span className="per-serving-hint"> — per 1 {activeAnchor.servingLabel}</span>
-              <input
-                inputMode="decimal"
+              <NumberInput
                 value={values[CALORIE_FIELD.key]}
                 onChange={(e) => setField(CALORIE_FIELD.key, e.target.value)}
               />
@@ -868,8 +869,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
                   {missingFromSearch.has(key) && (
                     <span className="flag-hint"> — missing, confirm</span>
                   )}
-                  <input
-                    inputMode="decimal"
+                  <NumberInput
                     value={values[key]}
                     onChange={(e) => setField(key, e.target.value)}
                   />

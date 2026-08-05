@@ -8,7 +8,9 @@ import {
   type FoodFormErrors,
   type FoodFormValues,
 } from '../lib/validation';
+import { ClearableInput, ClearableTextarea } from '../components/ClearableInput';
 import { MealBuilder, type MealBuilderMode } from '../components/MealBuilder';
+import { NumberInput } from '../components/NumberInput';
 import { PhotoCapture } from '../components/PhotoCapture';
 import { FoodThumbnail } from '../components/FoodThumbnail';
 import { useAppState } from '../state/AppState';
@@ -216,19 +218,21 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
           <div className="food-edit-fields">
             <label>
               Name
-              <input
+              <ClearableInput
                 value={values.name}
                 onChange={(e) => setField('name', e.target.value)}
                 autoFocus
+                clearLabel="Clear name"
               />
               {errors.name && <span className="field-error">{errors.name}</span>}
             </label>
             <label>
               Description (optional)
-              <input
+              <ClearableInput
                 value={values.description}
                 onChange={(e) => setField('description', e.target.value)}
                 placeholder="Brand, prep, weights"
+                clearLabel="Clear description"
               />
             </label>
           </div>
@@ -237,11 +241,12 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
         {recipeOpen ? (
           <label>
             Recipe (optional)
-            <textarea
+            <ClearableTextarea
               value={values.recipe}
               onChange={(e) => setField('recipe', e.target.value)}
               placeholder="Prep steps — e.g. Boil water in the kettle. Add 53g powdered mash..."
               rows={4}
+              clearLabel="Clear recipe"
             />
           </label>
         ) : (
@@ -258,16 +263,16 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
           <div className="serving-def-row">
             <label>
               Serving name
-              <input
+              <ClearableInput
                 value={values.servingLabel}
                 onChange={(e) => setField('servingLabel', e.target.value)}
                 placeholder={DEFAULT_SERVING_LABEL}
+                clearLabel="Clear serving name"
               />
             </label>
             <label>
               Equals
-              <input
-                inputMode="decimal"
+              <NumberInput
                 value={values.servingSizeAmount}
                 onChange={(e) => setField('servingSizeAmount', e.target.value)}
                 placeholder="e.g. 120"
@@ -297,8 +302,7 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
 
         <label>
           Calories (kcal)
-          <input
-            inputMode="decimal"
+          <NumberInput
             value={values.calories}
             onChange={(e) => setField('calories', e.target.value)}
           />
@@ -309,8 +313,7 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
           {NUTRIENT_FIELDS.map(({ key, label }) => (
             <label key={key}>
               {label}
-              <input
-                inputMode="decimal"
+              <NumberInput
                 value={values[key]}
                 onChange={(e) => setField(key, e.target.value)}
               />
@@ -577,7 +580,7 @@ export function FoodsScreen() {
           )}
 
           {foods.length > 0 && (
-            <input
+            <ClearableInput
               className="search-input"
               type="search"
               placeholder={
@@ -586,6 +589,7 @@ export function FoodsScreen() {
               aria-label="Filter your library"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              clearLabel="Clear library filter"
             />
           )}
 

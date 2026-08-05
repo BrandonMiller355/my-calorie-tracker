@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { formatDateKey, todayKey } from '../lib/date';
 import { GOAL_FIELDS, goalsToFormValues, parseGoalsForm } from '../lib/goalFields';
 import type { Goals } from '../types';
+import { NumberInput } from './NumberInput';
 
 /** Lets the signed-in user override the default goal for a single day. */
 export function DayGoalEditor({
@@ -112,8 +113,7 @@ export function DayGoalEditor({
       {GOAL_FIELDS.map(({ key, label: fieldLabel }) => (
         <label key={key}>
           {fieldLabel}
-          <input
-            inputMode="decimal"
+          <NumberInput
             value={values[key]}
             onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
           />

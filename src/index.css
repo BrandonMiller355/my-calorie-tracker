@@ -2509,3 +2509,51 @@ input[type='search']::-webkit-search-cancel-button {
   flex: 1;
   min-width: 0;
 }
+
+/* Text fields with a clear (✕) button. The wrapper only exists to anchor the
+   button, so it has to disappear into whatever layout the field sat in. */
+.clearable-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Rows where the bare input used to be the flex item */
+.ai-refine-row .clearable-input,
+.text-log-item-fields .clearable-input {
+  flex: 1;
+}
+
+.clearable-input input,
+.clearable-input textarea {
+  /* block kills the inline-baseline gap the wrapper would otherwise add */
+  display: block;
+  padding-right: 36px;
+}
+
+.input-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--r-pill);
+}
+
+.input-clear:hover {
+  color: var(--ink);
+}
+
+/* Multi-line fields: pin the button to the top corner instead of the middle */
+.clearable-textarea .input-clear {
+  top: 6px;
+  transform: none;
+}
