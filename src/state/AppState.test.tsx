@@ -11,6 +11,14 @@ import type {
   WeekDeficitDay,
 } from '../types';
 
+/** Lets a test pin the calendar day the provider believes it is. */
+const clock = vi.hoisted(() => ({ today: null as string | null }));
+
+vi.mock('../lib/date', async () => {
+  const actual = await vi.importActual<typeof import('../lib/date')>('../lib/date');
+  return { ...actual, todayKey: () => clock.today ?? actual.todayKey() };
+});
+
 const BEANS: LibraryFood = {
   id: 'beans',
   name: 'Beans',
@@ -46,12 +54,15 @@ const TACO_SALAD: SavedMeal = {
 class FakeRepository implements StorageRepository {
   addEntryCalls: FoodEntry[] = [];
   addFoodCalls: LibraryFood[] = [];
+  /** One date per getEntriesByDate call, in order, so reloads are observable */
+  entryLoadDates: string[] = [];
   constructor(
     private foods: LibraryFood[] = [],
     private meals: SavedMeal[] = [],
   ) {}
 
-  async getEntriesByDate(): Promise<FoodEntry[]> {
+  async getEntriesByDate(date: string): Promise<FoodEntry[]> {
+    this.entryLoadDates.push(date);
     return [];
   }
   async addEntry(entry: FoodEntry): Promise<void> {
@@ -237,5 +248,129 @@ describe('addEntry skip-macro-check capture seed', () => {
     expect(repository.addFoodCalls).toHaveLength(0);
     expect(repository.addEntryCalls[0]).toMatchObject({ foodId: 'food-beer' });
     expect(repository.addEntryCalls[0]).not.toHaveProperty('skipMacroCheck');
+  });
+});
+
+describe('refresh on return from the background', () => {
+  /** Matches the default staleness window in useRefreshOnReturn. */
+  const STALE_MS = 2 * 60 * 1000;
+  const realNow = Date.now.bind(Date);
+  let clockOffset = 0;
+
+  beforeEach(() => {
+    clockOffset = 0;
+    clock.today = '2026-08-05';
+    // Offset rather than pin, so testing-library's own timeouts still advance
+    vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffset);
+  });
+
+  afterEach(() => {
+    clock.today = null;
+    vi.restoreAllMocks();
+  });
+
+  async function renderWith(repository: FakeRepository) {
+    const { result } = renderHook(() => useAppState(), {
+      wrapper: ({ children }) => <AppProvider repository={repository}>{children}</AppProvider>,
+    });
+    await waitFor(() => expect(result.current.entriesLoading).toBe(false));
+    return result;
+  }
+
+  /** Advances the clock, then simulates the user coming back to the tab. */
+  async function returnAfter(ms: number) {
+    clockOffset += ms;
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+  }
+
+  it('reloads the log after time away', async () => {
+    const repository = new FakeRepository();
+    const result = await renderWith(repository);
+    expect(repository.entryLoadDates).toEqual(['2026-08-05']);
+
+    await returnAfter(STALE_MS + 1);
+
+    expect(repository.entryLoadDates).toEqual(['2026-08-05', '2026-08-05']);
+    expect(result.current.date).toBe('2026-08-05');
+  });
+
+  it('leaves the log alone on a quick glance away and back', async () => {
+    const repository = new FakeRepository();
+    await renderWith(repository);
+
+    // Well inside the window, with room for the real time the render itself
+    // takes — the fake clock here runs alongside the real one, not instead of it
+    await returnAfter(STALE_MS / 2);
+
+    expect(repository.entryLoadDates).toEqual(['2026-08-05']);
+  });
+
+  it('swaps fresh data in without blanking the log behind a skeleton', async () => {
+    class SlowRepository extends FakeRepository {
+      release: (() => void) | null = null;
+      async getEntriesByDate(date: string): Promise<FoodEntry[]> {
+        this.entryLoadDates.push(date);
+        // Only the reload hangs, so the first render still settles normally
+        if (this.entryLoadDates.length > 1) {
+          await new Promise<void>((resolve) => {
+            this.release = resolve;
+          });
+        }
+        return [];
+      }
+    }
+    const repository = new SlowRepository();
+    const result = await renderWith(repository);
+
+    await returnAfter(STALE_MS + 1);
+
+    // The reload is still in flight, yet the log is still showing what it had
+    expect(repository.release).not.toBeNull();
+    expect(result.current.entriesLoading).toBe(false);
+    await act(async () => {
+      repository.release!();
+    });
+  });
+
+  it('moves a tab left open past midnight onto the new day', async () => {
+    const repository = new FakeRepository();
+    const result = await renderWith(repository);
+
+    clock.today = '2026-08-06';
+    await returnAfter(STALE_MS + 1);
+
+    await waitFor(() => expect(result.current.date).toBe('2026-08-06'));
+    expect(repository.entryLoadDates).toContain('2026-08-06');
+  });
+
+  it('keeps a deliberately chosen past date when the day rolls over', async () => {
+    const repository = new FakeRepository();
+    const result = await renderWith(repository);
+
+    act(() => result.current.setDate('2026-07-30'));
+    await waitFor(() => expect(result.current.date).toBe('2026-07-30'));
+
+    clock.today = '2026-08-06';
+    await returnAfter(STALE_MS + 1);
+
+    expect(result.current.date).toBe('2026-07-30');
+  });
+
+  it('retries a load that had failed before the user left', async () => {
+    class FailingRepository extends FakeRepository {
+      async getEntriesByDate(date: string): Promise<FoodEntry[]> {
+        this.entryLoadDates.push(date);
+        throw new Error('offline');
+      }
+    }
+    const repository = new FailingRepository();
+    const result = await renderWith(repository);
+    expect(result.current.loadFailed).toBe(true);
+
+    await returnAfter(STALE_MS + 1);
+
+    expect(repository.entryLoadDates).toHaveLength(2);
   });
 });
