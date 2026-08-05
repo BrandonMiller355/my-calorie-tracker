@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { ClearableInput } from '../components/ClearableInput';
 import { useAuth } from '../state/AuthProvider';
 
 /**
@@ -31,21 +32,23 @@ export function LoginScreen() {
       <form className="goals-form login-form" onSubmit={handleSubmit} aria-label="Sign in">
         <label>
           Email
-          <input
+          <ClearableInput
             type="email"
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoFocus
+            clearLabel="Clear email"
           />
         </label>
         <label>
           Password
-          <input
+          <ClearableInput
             type="password"
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            clearLabel="Clear password"
           />
         </label>
         {error && (

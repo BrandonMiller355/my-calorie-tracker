@@ -9,6 +9,8 @@ import { round1 } from '../lib/totals';
 import { availableUnits, deriveQuantity, unitLabel } from '../lib/units';
 import { useAppState } from '../state/AppState';
 import { MEALS, MEAL_LABELS, type LibraryFood, type Meal } from '../types';
+import { ClearableTextarea } from './ClearableInput';
+import { NumberInput } from './NumberInput';
 
 // Everything here — text, parsed items, edits — lives in this component's
 // state and dies with it. Nothing is persisted until "Add N entries".
@@ -161,7 +163,7 @@ export function TextLogOverlay({
           <label htmlFor="text-log-input" className="text-log-label">
             What did you eat?
           </label>
-          <textarea
+          <ClearableTextarea
             id="text-log-input"
             className="text-log-input"
             value={text}
@@ -171,6 +173,7 @@ export function TextLogOverlay({
             disabled={parsing}
             // The keyboard (and its dictation key) should pop without an extra tap
             autoFocus
+            clearLabel="Clear what you ate"
           />
           {parseError && (
             <div className="scanner-error" role="alert">
@@ -225,8 +228,7 @@ export function TextLogOverlay({
                   </span>
                 )}
                 <div className="text-log-item-fields">
-                  <input
-                    inputMode="decimal"
+                  <NumberInput
                     value={row.amountText}
                     onChange={(e) => setRow(row.key, { amountText: e.target.value })}
                     disabled={saving}

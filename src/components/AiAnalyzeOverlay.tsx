@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { analyzeFood, mapEstimateToResult, type FoodEstimate } from '../api/analyzeFood';
 import type { FoodSearchResult } from '../types';
+import { ClearableInput } from './ClearableInput';
 import { PhotoCapture } from './PhotoCapture';
 import { PhotoConfirm } from './PhotoConfirm';
 
@@ -198,12 +199,13 @@ export function AiAnalyzeOverlay({
                 Doesn’t look right? Tell the AI what it missed.
               </label>
               <div className="ai-refine-row">
-                <input
+                <ClearableInput
                   id="ai-correction"
                   value={correctionInput}
                   onChange={(e) => setCorrectionInput(e.target.value)}
                   placeholder="e.g. there’s rice under it too"
                   disabled={busy}
+                  clearLabel="Clear correction"
                 />
                 <button type="submit" className="secondary" disabled={busy || !correctionInput.trim()}>
                   Ask again

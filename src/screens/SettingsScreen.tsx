@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { NumberInput } from '../components/NumberInput';
 import { GOAL_FIELDS, goalsToFormValues, parseGoalsForm } from '../lib/goalFields';
 import { checkMacroCalories } from '../lib/macroCheck';
 import { useAppState } from '../state/AppState';
@@ -106,8 +107,7 @@ export function SettingsScreen() {
         {GOAL_FIELDS.map(({ key, label }) => (
           <label key={key}>
             {label}
-            <input
-              inputMode="decimal"
+            <NumberInput
               value={values[key]}
               onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
             />
@@ -130,8 +130,7 @@ export function SettingsScreen() {
         <form onSubmit={handleWeeklyDeficitSubmit} className="goals-form">
           <label>
             Weekly deficit goal (kcal)
-            <input
-              inputMode="decimal"
+            <NumberInput
               value={weeklyDeficitValue}
               placeholder="Not set"
               onChange={(e) => setWeeklyDeficitValue(e.target.value)}

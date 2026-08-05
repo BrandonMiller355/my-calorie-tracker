@@ -8,6 +8,8 @@ import {
 } from '../lib/validation';
 import { useAppState } from '../state/AppState';
 import type { LibraryFood, SavedMeal } from '../types';
+import { ClearableInput } from './ClearableInput';
+import { NumberInput } from './NumberInput';
 
 /** Create a new meal from seed foods, or edit an existing saved meal. */
 export type MealBuilderMode =
@@ -138,7 +140,13 @@ export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose:
 
         <label>
           Name
-          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="e.g. Taco salad" />
+          <ClearableInput
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+            placeholder="e.g. Taco salad"
+            clearLabel="Clear name"
+          />
           {errors.name && <span className="field-error">{errors.name}</span>}
           {!errors.name && nameCollides && (
             <span className="field-error">A meal with this name already exists</span>
@@ -161,8 +169,7 @@ export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose:
                 <div className="meal-component-main">
                   <span className="result-name">{component.food.name}</span>
                   <div className="amount-unit">
-                    <input
-                      inputMode="decimal"
+                    <NumberInput
                       aria-label={`Amount of ${component.food.name}`}
                       value={component.amount}
                       onChange={(e) => setRow(index, { amount: e.target.value })}
@@ -199,7 +206,7 @@ export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose:
 
         {adding ? (
           <div className="meal-add-food">
-            <input
+            <ClearableInput
               className="search-input"
               type="search"
               autoFocus
@@ -207,6 +214,7 @@ export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose:
               aria-label="Add a food from your library"
               value={addQuery}
               onChange={(e) => setAddQuery(e.target.value)}
+              clearLabel="Clear food search"
             />
             {addQuery.trim() !== '' && (
               <ul className="meal-add-results">
