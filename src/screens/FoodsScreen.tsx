@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { findFoodByName, matchFoods, normalizeFoodName } from '../lib/foodMatch';
+import { findFoodByName, matchFoods, matchMeals, normalizeFoodName } from '../lib/foodMatch';
 import { checkMacroCalories, macroMismatchMessage } from '../lib/macroCheck';
 import { resolveMeal } from '../lib/meal';
 import { MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
@@ -369,6 +369,7 @@ function MealsTab({
   const { meals, foods, archiveMeal } = useAppState();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [archiveFailed, setArchiveFailed] = useState(false);
+  const [query, setQuery] = useState('');
 
   function toggle(id: string) {
     setExpanded((prev) => {
@@ -393,7 +394,10 @@ function MealsTab({
     );
   }
 
-  const sorted = [...meals].sort((a, b) => a.name.localeCompare(b.name));
+  const visible =
+    query.trim() === ''
+      ? [...meals].sort((a, b) => a.name.localeCompare(b.name))
+      : matchMeals(meals, query);
 
   return (
     <>
@@ -402,51 +406,66 @@ function MealsTab({
           Couldn’t archive the meal — it was not removed. Check your connection and try again.
         </p>
       )}
-      <ul className="food-list">
-        {sorted.map((meal) => {
-          const { resolved, unavailable, totals } = resolveMeal(meal, foods);
-          const open = expanded.has(meal.id);
-          return (
-            <li key={meal.id} className="food-row">
-              <div className="food-row-main">
-                <span className="result-name">{meal.name}</span>
-                <span className="result-macros">
-                  {totals.calories} kcal · F {totals.fat} g · C {totals.carbs} g · P {totals.protein} g
-                </span>
-                <button type="button" className="link-button" onClick={() => toggle(meal.id)}>
-                  {open ? 'Hide items' : `${resolved.length + unavailable.length} items`}
-                </button>
-                {open && (
-                  <ul className="meal-breakdown">
-                    {resolved.map((r) => (
-                      <li key={r.food.id}>
-                        {r.food.name} · {r.component.amount} {unitLabel(r.component.unit)}
-                      </li>
-                    ))}
-                    {unavailable.length > 0 && (
-                      <li className="meal-breakdown-missing">
-                        {unavailable.length === 1 ? '1 item unavailable' : `${unavailable.length} items unavailable`}
-                      </li>
-                    )}
-                  </ul>
-                )}
-              </div>
-              <div className="food-row-actions">
-                <button type="button" onClick={() => onEdit(meal)}>
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Archive ${meal.name}`}
-                  onClick={() => handleArchive(meal)}
-                >
-                  Archive
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+
+      <ClearableInput
+        className="search-input"
+        type="search"
+        placeholder="Filter your meals"
+        aria-label="Filter your meals"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        clearLabel="Clear meal filter"
+      />
+
+      {visible.length === 0 ? (
+        <p className="search-hint">No meals match “{query.trim()}”.</p>
+      ) : (
+        <ul className="food-list">
+          {visible.map((meal) => {
+            const { resolved, unavailable, totals } = resolveMeal(meal, foods);
+            const open = expanded.has(meal.id);
+            return (
+              <li key={meal.id} className="food-row">
+                <div className="food-row-main">
+                  <span className="result-name">{meal.name}</span>
+                  <span className="result-macros">
+                    {totals.calories} kcal · F {totals.fat} g · C {totals.carbs} g · P {totals.protein} g
+                  </span>
+                  <button type="button" className="link-button" onClick={() => toggle(meal.id)}>
+                    {open ? 'Hide items' : `${resolved.length + unavailable.length} items`}
+                  </button>
+                  {open && (
+                    <ul className="meal-breakdown">
+                      {resolved.map((r) => (
+                        <li key={r.food.id}>
+                          {r.food.name} · {r.component.amount} {unitLabel(r.component.unit)}
+                        </li>
+                      ))}
+                      {unavailable.length > 0 && (
+                        <li className="meal-breakdown-missing">
+                          {unavailable.length === 1 ? '1 item unavailable' : `${unavailable.length} items unavailable`}
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+                <div className="food-row-actions">
+                  <button type="button" onClick={() => onEdit(meal)}>
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Archive ${meal.name}`}
+                    onClick={() => handleArchive(meal)}
+                  >
+                    Archive
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </>
   );
 }
