@@ -392,6 +392,12 @@ const TACO_SALAD: SavedMeal = {
   ],
 };
 
+const OATS_AND_TOAST: SavedMeal = {
+  id: 'oats-and-toast',
+  name: 'Oats and toast',
+  items: [{ foodId: 'oatmeal', amount: 1, unit: 'serving' }],
+};
+
 /** Enter multi-select mode and tick the named foods, searching for each in turn —
  *  select mode lists nothing until the search narrows the library. */
 async function selectFoods(...names: string[]) {
@@ -525,6 +531,31 @@ describe('FoodsScreen Meals tab', () => {
     const row = (await screen.findByText('Taco salad')).closest('.food-row') as HTMLElement;
     fireEvent.click(within(row).getByText('2 items'));
     expect(within(row).getByText('1 item unavailable')).toBeInTheDocument();
+  });
+
+  it('filters the meal list by name', async () => {
+    renderFoods([PBJ, OATMEAL], [TACO_SALAD, OATS_AND_TOAST]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+
+    fireEvent.change(await screen.findByLabelText('Filter your meals'), {
+      target: { value: 'oats' },
+    });
+
+    expect(screen.getByText('Oats and toast')).toBeInTheDocument();
+    expect(screen.queryByText('Taco salad')).not.toBeInTheDocument();
+  });
+
+  it('says when no meal matches the filter, then restores the list when cleared', async () => {
+    renderFoods([PBJ, OATMEAL], [TACO_SALAD, OATS_AND_TOAST]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+
+    const filter = await screen.findByLabelText('Filter your meals');
+    fireEvent.change(filter, { target: { value: 'sushi' } });
+    expect(screen.getByText('No meals match “sushi”.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Clear meal filter'));
+    expect(screen.getByText('Taco salad')).toBeInTheDocument();
+    expect(screen.getByText('Oats and toast')).toBeInTheDocument();
   });
 
   it('archives a meal after confirmation', async () => {
