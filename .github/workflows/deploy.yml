@@ -10,9 +10,13 @@ permissions:
   pages: write
   id-token: write
 
+# A Pages deployment can sit queued on GitHub's side for minutes. Cancelling
+# the in-flight run means the next push (or a re-run) kills that deployment
+# mid-flight and the superseded one reports "Deployment cancelled" — so runs
+# queue behind each other instead, per GitHub's own Pages starter workflow.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
