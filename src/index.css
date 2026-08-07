@@ -1292,6 +1292,41 @@ a:hover {
   flex-shrink: 0;
 }
 
+.portion-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Specific enough to beat the full-width `.entry-form input` rule */
+.entry-form .portion-input {
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.portion-suffix {
+  font: 600 13px/1 var(--font);
+  color: var(--ink-soft);
+  margin-left: -3px;
+}
+
+.portion-presets {
+  display: flex;
+  gap: 6px;
+}
+
+.portion-chip {
+  min-width: 40px;
+  justify-content: center;
+}
+
+.portion-chip-active {
+  background: var(--brand-tint);
+  border-color: var(--card-border-active);
+  color: var(--brand-strong);
+}
+
 .combobox-option-desc,
 .combobox-selected-desc {
   color: var(--ink-soft);
