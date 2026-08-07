@@ -240,10 +240,11 @@ export interface AppContextValue extends AppState {
   archiveMeal: (id: string) => Promise<void>;
   /**
    * Fans a saved meal out into one ordinary entry per available component,
-   * logged to the given slot and date. Components whose food no longer resolves
-   * are skipped; resolves to the number of entries actually created.
+   * logged to the given slot and date. `portion` scales every component's
+   * amount (1 = the whole meal). Components whose food no longer resolves are
+   * skipped; resolves to the number of entries actually created.
    */
-  logMeal: (mealId: string, meal: Meal, date: string) => Promise<number>;
+  logMeal: (mealId: string, meal: Meal, date: string, portion?: number) => Promise<number>;
   getMealSuggestions: (meal: Meal) => Promise<MealSuggestions>;
   saveWeeklyDeficitGoal: (goal: number) => Promise<void>;
 }
@@ -606,12 +607,12 @@ export function AppProvider({
   );
 
   const logMeal = useCallback(
-    async (mealId: string, meal: Meal, date: string) => {
+    async (mealId: string, meal: Meal, date: string, portion = 1) => {
       const savedMeal = state.meals.find((m) => m.id === mealId);
       if (!savedMeal) return 0;
       // Resolve against the current library so archived/removed components (and
       // portions the food's anchor no longer offers) are skipped, not logged.
-      const { resolved } = resolveMeal(savedMeal, state.foods);
+      const { resolved } = resolveMeal(savedMeal, state.foods, portion);
       for (const component of resolved) {
         const { food, quantity } = component;
         // Same shape any single food log produces: per-serving nutrition + the
@@ -620,7 +621,7 @@ export function AppProvider({
           date,
           meal,
           name: food.name,
-          amount: component.component.amount,
+          amount: component.amount,
           unit: component.component.unit,
           servingLabel: food.servingLabel,
           servingSize: food.servingSize,

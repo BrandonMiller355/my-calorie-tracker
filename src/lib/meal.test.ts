@@ -69,6 +69,25 @@ describe('resolveMeal', () => {
     expect(resolved).toHaveLength(0);
   });
 
+  it('scales every component and the totals by the portion', () => {
+    const { resolved, totals } = resolveMeal(meal, [beans, turkey, lettuce], 0.5);
+    expect(resolved.map((r) => r.amount)).toEqual([0.25, 50, 0.5]);
+    expect(resolved.map((r) => r.quantity)).toEqual([0.25, 0.5, 0.5]);
+    expect(totals.calories).toBe(Math.round(365 / 2));
+  });
+
+  it('rounds a scaled amount to 2dp and derives its calories from the rounded value', () => {
+    const third = resolveMeal({ ...meal, items: [{ foodId: 'turkey', amount: 100, unit: 'g' }] }, [turkey], 1 / 3);
+    expect(third.resolved[0].amount).toBe(33.33);
+    expect(third.resolved[0].calories).toBe(200 * 0.3333);
+  });
+
+  it('leaves an unavailable component unaffected by the portion', () => {
+    const { unavailable } = resolveMeal(meal, [beans, lettuce], 0.5);
+    // Reported at its stored portion — nothing about it is being logged
+    expect(unavailable).toEqual([{ foodId: 'turkey', amount: 100, unit: 'g' }]);
+  });
+
   it('returns empty resolved when every component is unavailable', () => {
     const { resolved, unavailable, totals } = resolveMeal(meal, []);
     expect(resolved).toEqual([]);

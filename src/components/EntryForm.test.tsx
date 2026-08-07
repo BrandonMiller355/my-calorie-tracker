@@ -789,6 +789,47 @@ describe('EntryForm meal logging', () => {
     );
   });
 
+  it('applies the chosen portion to every component it logs', async () => {
+    const onClose = vi.fn();
+    const repository = await renderWithMeals([CHICKEN, COOKIE], [TACO_SALAD], onClose);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'taco' } });
+    fireEvent.click(screen.getByText('Taco salad'));
+
+    const sheet = screen.getByRole('dialog', { name: 'Log Taco salad' });
+    fireEvent.click(within(sheet).getByRole('button', { name: '½' }));
+    // The preview follows the portion before anything is saved
+    expect(within(sheet).getByText('Total: 193 kcal')).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByText('Log all'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addEntryCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ foodId: 'food-chicken', amount: 0.5, quantity: 0.5 }),
+        expect.objectContaining({ foodId: 'food-cookie', amount: 0.5, quantity: 0.5 }),
+      ]),
+    );
+  });
+
+  it('accepts a typed portion and blocks logging when it is not a positive number', async () => {
+    const repository = await renderWithMeals([CHICKEN, COOKIE], [TACO_SALAD]);
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'taco' } });
+    fireEvent.click(screen.getByText('Taco salad'));
+
+    const sheet = screen.getByRole('dialog', { name: 'Log Taco salad' });
+    const portion = within(sheet).getByLabelText('Portion');
+    fireEvent.change(portion, { target: { value: '0' } });
+    expect(within(sheet).getByText('Enter a portion greater than 0')).toBeInTheDocument();
+    expect(within(sheet).getByText('Log all')).toBeDisabled();
+
+    fireEvent.change(portion, { target: { value: '1.5' } });
+    fireEvent.click(within(sheet).getByText('Log all'));
+
+    await waitFor(() => expect(repository.addEntryCalls).toHaveLength(2));
+    expect(repository.addEntryCalls[0]).toMatchObject({ amount: 1.5, quantity: 1.5 });
+  });
+
   it('skips an unavailable component and notes it on the sheet', async () => {
     // Only the chicken resolves; the cookie component is gone
     const repository = await renderWithMeals([CHICKEN], [TACO_SALAD]);

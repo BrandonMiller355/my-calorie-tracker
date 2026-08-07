@@ -5,7 +5,9 @@ import { availableUnits, deriveQuantity } from './units';
 export interface ResolvedComponent {
   component: MealComponent;
   food: LibraryFood;
-  /** Servings multiplier derived from the component's amount + unit */
+  /** The component's stored amount scaled by the portion being logged */
+  amount: number;
+  /** Servings multiplier derived from the scaled amount + the component's unit */
   quantity: number;
   calories: number;
   carbs: number;
@@ -37,14 +39,23 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Scaled amounts round to 2dp so what's shown is exactly what gets logged. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 /**
  * Resolve a saved meal's components against the current library foods, computing
  * each contribution live (reusing the serving-units multiplier) and summing the
  * totals. A component whose food is missing, or whose stored unit the food's
  * current anchor no longer offers, is reported as unavailable and excluded from
  * the totals rather than throwing.
+ *
+ * `portion` scales every component's amount by the same factor — half a meal is
+ * half of each of its foods. Contributions are derived from the rounded scaled
+ * amount, so the shown portion and its calories always agree.
  */
-export function resolveMeal(meal: SavedMeal, foods: LibraryFood[]): ResolvedMeal {
+export function resolveMeal(meal: SavedMeal, foods: LibraryFood[], portion = 1): ResolvedMeal {
   const byId = new Map(foods.map((f) => [f.id, f]));
   const resolved: ResolvedComponent[] = [];
   const unavailable: MealComponent[] = [];
@@ -56,10 +67,12 @@ export function resolveMeal(meal: SavedMeal, foods: LibraryFood[]): ResolvedMeal
       unavailable.push(component);
       continue;
     }
-    const quantity = deriveQuantity(component.amount, component.unit, anchor);
+    const amount = round2(component.amount * portion);
+    const quantity = deriveQuantity(amount, component.unit, anchor);
     resolved.push({
       component,
       food,
+      amount,
       quantity,
       calories: food.calories * quantity,
       carbs: food.carbs * quantity,
