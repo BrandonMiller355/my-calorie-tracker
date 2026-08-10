@@ -28,7 +28,6 @@ export function FoodThumbnail({
   const { getFoodImageUrl } = useAppState();
   const path = food.imagePath;
   const [url, setUrl] = useState<string | null>(() => (path ? getCachedFoodImageUrl(path) : null));
-  const [enlarged, setEnlarged] = useState(false);
   // Bumped when a photo is replaced/removed so the effect re-signs even though
   // the object path (and thus its deps) hasn't changed.
   const [refresh, setRefresh] = useState(0);
@@ -60,6 +59,40 @@ export function FoodThumbnail({
     };
   }, [path, getFoodImageUrl, refresh]);
 
+  if (!path || !url) return null;
+
+  return (
+    <PhotoThumbnail
+      url={url}
+      name={food.name}
+      className={className}
+      enlargeable={enlargeable}
+      renderActions={renderActions}
+    />
+  );
+}
+
+/**
+ * The thumbnail itself, given a ready-to-use image URL — so it serves both a
+ * stored photo (via FoodThumbnail's signed URL) and one just captured but not
+ * yet uploaded, as when adding a food.
+ */
+export function PhotoThumbnail({
+  url,
+  name,
+  className,
+  enlargeable,
+  renderActions,
+}: {
+  url: string;
+  /** Names the photo for assistive tech — the food's name, or what it will be. */
+  name: string;
+  className?: string;
+  enlargeable?: boolean;
+  renderActions?: (close: () => void) => ReactNode;
+}) {
+  const [enlarged, setEnlarged] = useState(false);
+
   // Close the enlarged view on Escape, matching the other overlays.
   useEffect(() => {
     if (!enlarged) return;
@@ -70,9 +103,7 @@ export function FoodThumbnail({
     return () => window.removeEventListener('keydown', onKey);
   }, [enlarged]);
 
-  if (!path || !url) return null;
-
-  const img = <img src={url} alt={food.name} className={className ?? 'food-thumb'} />;
+  const img = <img src={url} alt={name} className={className ?? 'food-thumb'} />;
   if (!enlargeable) return img;
 
   return (
@@ -81,7 +112,7 @@ export function FoodThumbnail({
         type="button"
         className="food-thumb-button"
         onClick={() => setEnlarged(true)}
-        aria-label={`View ${food.name} photo`}
+        aria-label={`View ${name} photo`}
       >
         {img}
       </button>
@@ -89,11 +120,11 @@ export function FoodThumbnail({
         <div
           className="image-lightbox"
           role="dialog"
-          aria-label={`${food.name} photo`}
+          aria-label={`${name} photo`}
           onClick={() => setEnlarged(false)}
         >
           <div className="image-lightbox-figure">
-            <img src={url} alt={food.name} className="image-lightbox-img" />
+            <img src={url} alt={name} className="image-lightbox-img" />
             {renderActions && (
               <div className="image-lightbox-actions" onClick={(e) => e.stopPropagation()}>
                 {renderActions(() => setEnlarged(false))}

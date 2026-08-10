@@ -298,6 +298,49 @@ describe('FoodsScreen food photos', () => {
     // The image reference must survive the save, not be clobbered to undefined.
     expect(repository.updated[0]).toMatchObject({ calories: 333, imagePath: 'uid/pbj.jpg' });
   });
+
+  /** Fills the add form with a food whose macros already add up. */
+  function fillNewFood(name: string) {
+    setName(name);
+    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Carbs (g)'), { target: { value: '25' } });
+  }
+
+  it('attaches a photo chosen while adding a food, once the food is saved', async () => {
+    const repository = renderFoods([]);
+
+    fireEvent.click(await screen.findByText('+ Add food item'));
+    fillNewFood('Rice');
+    fireEvent.click(screen.getByLabelText('Add photo'));
+    fireEvent.click(screen.getByText('stub-capture'));
+    // The pending photo previews in the form before there is anything to upload.
+    expect(await screen.findByLabelText('View Rice photo')).toBeInTheDocument();
+    expect(repository.imageUploads).toHaveLength(0);
+
+    fireEvent.click(screen.getByText('Add to library'));
+
+    await waitFor(() => expect(repository.imageUploads).toHaveLength(1));
+    expect(repository.added).toHaveLength(1);
+    expect(repository.imageUploads[0].foodId).toBe(repository.added[0].id);
+  });
+
+  it('drops a pending photo removed before the new food is saved', async () => {
+    const repository = renderFoods([]);
+
+    fireEvent.click(await screen.findByText('+ Add food item'));
+    fillNewFood('Rice');
+    fireEvent.click(screen.getByLabelText('Add photo'));
+    fireEvent.click(screen.getByText('stub-capture'));
+
+    fireEvent.click(await screen.findByLabelText('View Rice photo'));
+    fireEvent.click(screen.getByLabelText('Remove photo'));
+    expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Add to library'));
+
+    await waitFor(() => expect(repository.added).toHaveLength(1));
+    expect(repository.imageUploads).toHaveLength(0);
+  });
 });
 
 // Beer's alcohol calories never reconcile with its macros: 6c + 1p + 0f ≈ 28

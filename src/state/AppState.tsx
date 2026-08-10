@@ -221,7 +221,12 @@ export interface AppContextValue extends AppState {
   saveDayGoals: (goals: Goals) => Promise<void>;
   /** Removes the current date's override, reverting it to defaultGoals. */
   clearDayGoals: () => Promise<void>;
-  addFood: (food: Omit<LibraryFood, 'id'>) => Promise<void>;
+  /**
+   * Adds a food, optionally with a photo chosen before it existed (from the
+   * add-food form). The photo uploads in the background, after the food itself
+   * is saved, so it never delays or blocks the add.
+   */
+  addFood: (food: Omit<LibraryFood, 'id'>, imageDataUrl?: string) => Promise<void>;
   updateFood: (food: LibraryFood) => Promise<void>;
   archiveFood: (id: string) => Promise<void>;
   /**
@@ -518,13 +523,39 @@ export function AppProvider({
     dispatch({ type: 'day-goal-cleared' });
   }, [repository, state.date]);
 
+  /**
+   * Uploads a photo for a food and records the resulting path on it. Takes the
+   * food itself rather than an id so a just-added food — not yet in `state.foods`
+   * as far as this closure can see — still gets its image applied.
+   */
+  const applyFoodImage = useCallback(
+    async (food: LibraryFood, dataUrl: string) => {
+      // Best-effort: an upload failure must never disturb the primary action
+      // (logging an entry, saving a food, or resolving a match), so it is
+      // swallowed here rather than surfaced as a rejection.
+      try {
+        const imagePath = await repository.uploadFoodImage(food.id, dataUrlToBlob(dataUrl));
+        // A replace reuses the same object key, so the cached signed URL must be
+        // dropped or the old image would linger until a reload.
+        invalidateFoodImage(imagePath);
+        dispatch({ type: 'food-updated', food: { ...food, imagePath } });
+      } catch {
+        // no-op; the food simply keeps whatever image it had (often none)
+      }
+    },
+    [repository],
+  );
+
   const addFood = useCallback(
-    async (input: Omit<LibraryFood, 'id'>) => {
+    async (input: Omit<LibraryFood, 'id'>, imageDataUrl?: string) => {
       const food: LibraryFood = { ...input, id: crypto.randomUUID() };
       await repository.addFood(food);
       dispatch({ type: 'food-added', food });
+      // Fire-and-forget, like every other photo attach: the food is already
+      // saved, so the upload must not hold up the caller closing its form.
+      if (imageDataUrl) void applyFoodImage(food, imageDataUrl);
     },
-    [repository],
+    [repository, applyFoodImage],
   );
 
   const updateFood = useCallback(
@@ -545,21 +576,10 @@ export function AppProvider({
 
   const setFoodImage = useCallback(
     async (foodId: string, dataUrl: string) => {
-      // Best-effort: an upload failure must never disturb the primary action
-      // (logging an entry, saving a food, or resolving a match), so it is
-      // swallowed here rather than surfaced as a rejection.
-      try {
-        const imagePath = await repository.uploadFoodImage(foodId, dataUrlToBlob(dataUrl));
-        // A replace reuses the same object key, so the cached signed URL must be
-        // dropped or the old image would linger until a reload.
-        invalidateFoodImage(imagePath);
-        const food = state.foods.find((f) => f.id === foodId);
-        if (food) dispatch({ type: 'food-updated', food: { ...food, imagePath } });
-      } catch {
-        // no-op; the food simply keeps whatever image it had (often none)
-      }
+      const food = state.foods.find((f) => f.id === foodId);
+      if (food) await applyFoodImage(food, dataUrl);
     },
-    [repository, state.foods],
+    [applyFoodImage, state.foods],
   );
 
   const removeFoodImage = useCallback(

@@ -32,7 +32,15 @@ Food images SHALL be readable and writable only by the user who owns the food, e
 - **THEN** access is denied and the image is not retrievable
 
 ### Requirement: Attach, replace, and remove a photo from the food editor
-The edit-food form SHALL let the user attach a photo to the food, replace an existing photo, and remove the photo. Attaching or replacing SHALL obtain the image through the app's existing photo-source selection (camera capture or file selection) and downscale it through the shared pipeline before upload. Removing SHALL clear both the stored image and the food's reference to it. These actions SHALL be available whenever editing an existing library food.
+The food form SHALL let the user attach a photo to the food, replace an existing photo, and remove the photo. Attaching or replacing SHALL obtain the image through the app's existing photo-source selection (camera capture or file selection) and downscale it through the shared pipeline before upload. Removing SHALL clear both the stored image and the food's reference to it. These actions SHALL be available both when editing an existing library food and when adding a new one, presented identically in the two forms. A photo chosen while adding a food SHALL be held until the food is saved and then attached to it; abandoning the add SHALL leave nothing stored.
+
+#### Scenario: Attach a photo while adding a food
+- **WHEN** the user chooses an image on the add-food form and saves the new food
+- **THEN** the food is created first and the image is then uploaded to its private image path, so the new food shows that photo
+
+#### Scenario: Photo discarded with an abandoned add
+- **WHEN** the user chooses an image on the add-food form and then removes it, or cancels the form
+- **THEN** nothing is uploaded and no image is stored
 
 #### Scenario: Attach a photo to a food without one
 - **WHEN** the user edits a food that has no photo, chooses an image, and saves
