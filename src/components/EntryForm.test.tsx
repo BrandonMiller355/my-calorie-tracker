@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { EntryForm } from './EntryForm';
 import { AppProvider } from '../state/AppState';
@@ -100,33 +100,46 @@ vi.mock('./AiAnalyzeOverlay', () => ({
   }: {
     initialImage?: string;
     initialNote?: string;
-    onAccept: (result: {
-      id: string;
-      name: string;
-      servingLabel: string;
-      calories: number;
-      fat: number;
-      carbs: number;
-      protein: number;
-    }) => void;
+    onAccept: (
+      result: {
+        id: string;
+        name: string;
+        servingLabel: string;
+        calories: number;
+        fat: number;
+        carbs: number;
+        protein: number;
+      },
+      image: string,
+    ) => void;
   }) => (
     <div data-testid="analyze-overlay" data-image={initialImage} data-note={initialNote}>
       <button
         onClick={() =>
-          onAccept({
-            id: 'estimate-1',
-            name: 'Mystery bowl',
-            servingLabel: 'serving',
-            calories: 400,
-            fat: 10,
-            carbs: 50,
-            protein: 20,
-          })
+          onAccept(
+            {
+              id: 'estimate-1',
+              name: 'Mystery bowl',
+              servingLabel: 'serving',
+              calories: 400,
+              fat: 10,
+              carbs: 50,
+              protein: 20,
+            },
+            initialImage ?? 'data:image/jpeg;base64,analyzed',
+          )
         }
       >
         stub-accept-estimate
       </button>
     </div>
+  ),
+}));
+
+// The camera/file overlay is untestable in jsdom; the stub captures directly.
+vi.mock('./PhotoCapture', () => ({
+  PhotoCapture: ({ onCapture }: { onCapture: (img: string) => void; onCancel: () => void }) => (
+    <button onClick={() => onCapture('data:image/jpeg;base64,entryphoto')}>stub-capture</button>
   ),
 }));
 
@@ -970,5 +983,203 @@ describe('EntryForm macro/calorie mismatch warning', () => {
     expect(repository.addEntryCalls[0]).toMatchObject({ source: 'quick', calories: 400 });
     expect(repository.addFoodCalls).toHaveLength(0);
     expect(repository.updateFoodCalls).toHaveLength(0);
+  });
+});
+
+/** Fills the add form as a brand-new food whose macros already add up. */
+function fillNewFood(name: string) {
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: name } });
+  fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '100' } });
+  fireEvent.change(screen.getByLabelText(/Carbs \(g\)/), { target: { value: '25' } });
+}
+
+function attachPhoto() {
+  fireEvent.click(screen.getByLabelText('Add photo'));
+  fireEvent.click(screen.getByText('stub-capture'));
+}
+
+describe('EntryForm photo for a captured food', () => {
+  it('attaches the chosen photo to the food captured from logging', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+
+    fillNewFood('Cheesy mash');
+    attachPhoto();
+    // The held photo previews before there is anything to upload it to.
+    expect(await screen.findByLabelText('View Cheesy mash photo')).toBeInTheDocument();
+    expect(repository.imageUploads).toHaveLength(0);
+
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addFoodCalls).toHaveLength(1);
+    const captured = repository.addFoodCalls[0] as LibraryFood;
+    expect(captured.name).toBe('Cheesy mash');
+    await waitFor(() => expect(repository.imageUploads).toHaveLength(1));
+    expect(repository.imageUploads[0].foodId).toBe(captured.id);
+  });
+
+  it('offers no photo control for a matched food, when editing, or in quick mode', async () => {
+    await renderForm();
+    expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
+
+    // Typing a name the library knows stops this being a new food
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chicken breast' } });
+    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
+
+    enterQuickMode();
+    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
+
+    cleanup();
+    await renderForm({ editing: ENTRY });
+    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
+  });
+
+  it('drops a held photo when a library food is picked from the dropdown', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+
+    fillNewFood('Chicken');
+    attachPhoto();
+    expect(await screen.findByLabelText('View Chicken photo')).toBeInTheDocument();
+
+    const option = within(screen.getByRole('listbox'))
+      .getAllByRole('option')
+      .find((o) => o.textContent?.includes('Chicken breast'))!;
+    fireEvent.click(option);
+
+    // Nothing left to attach it to, so the control and the photo both go
+    expect(screen.queryByLabelText('View Chicken photo')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Add to log'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.imageUploads).toHaveLength(0);
+    expect(repository.addFoodCalls).toHaveLength(0);
+  });
+
+  it('uploads nothing when the photo is removed before saving', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+
+    fillNewFood('Cheesy mash');
+    attachPhoto();
+
+    fireEvent.click(await screen.findByLabelText('View Cheesy mash photo'));
+    fireEvent.click(screen.getByLabelText('Remove photo'));
+    expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Add to log'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addFoodCalls).toHaveLength(1);
+    expect(repository.imageUploads).toHaveLength(0);
+  });
+
+  it('uploads nothing when the form is closed without saving', async () => {
+    const repository = await renderForm();
+
+    fillNewFood('Cheesy mash');
+    attachPhoto();
+    await screen.findByLabelText('View Cheesy mash photo');
+
+    cleanup();
+    expect(repository.imageUploads).toHaveLength(0);
+    expect(repository.addFoodCalls).toHaveLength(0);
+  });
+
+  it('keeps the entry and the captured food when the image upload fails', async () => {
+    const onClose = vi.fn();
+    const repository = new FakeRepository();
+    repository.uploadFoodImage = async () => {
+      throw new Error('upload failed');
+    };
+    await renderForm({ onClose, repository });
+
+    fillNewFood('Cheesy mash');
+    attachPhoto();
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addEntryCalls).toHaveLength(1);
+    expect(repository.addFoodCalls).toHaveLength(1);
+    // Non-image values are all intact; the photo is the only thing lost
+    expect(repository.addFoodCalls[0]).toMatchObject({ name: 'Cheesy mash', calories: 100 });
+    expect(repository.addFoodCalls[0]).not.toHaveProperty('imagePath');
+  });
+
+  it('logs the entry and uploads nothing when the food capture fails', async () => {
+    const onClose = vi.fn();
+    const repository = new FakeRepository();
+    repository.addFood = async () => {
+      throw new Error('capture failed');
+    };
+    await renderForm({ onClose, repository });
+
+    fillNewFood('Cheesy mash');
+    attachPhoto();
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // The entry survives unlinked; with no food to attach to, the photo is dropped
+    expect(repository.addEntryCalls[0]).toMatchObject({ name: 'Cheesy mash', foodId: undefined });
+    expect(repository.imageUploads).toHaveLength(0);
+  });
+
+  it('holds the analyzed photo from an accepted estimate, still removable', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+
+    openIdentify();
+    fireEvent.click(screen.getByText('stub-fallback'));
+    fireEvent.click(screen.getByText('stub-accept-estimate'));
+
+    // The identify photo carried through the handoff into the form
+    expect(await screen.findByLabelText('View Mystery bowl photo')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('View Mystery bowl photo'));
+    fireEvent.click(screen.getByLabelText('Remove photo'));
+    expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Add to log'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.imageUploads).toHaveLength(0);
+  });
+
+  it('attaches the analyzed photo when the estimate is saved as-is', async () => {
+    const onClose = vi.fn();
+    const repository = await renderForm({ onClose });
+
+    openIdentify();
+    fireEvent.click(screen.getByText('stub-fallback'));
+    fireEvent.click(screen.getByText('stub-accept-estimate'));
+    await screen.findByLabelText('View Mystery bowl photo');
+
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const captured = repository.addFoodCalls[0] as LibraryFood;
+    expect(captured.name).toBe('Mystery bowl');
+    await waitFor(() => expect(repository.imageUploads).toHaveLength(1));
+    expect(repository.imageUploads[0].foodId).toBe(captured.id);
+  });
+
+  it('never attaches an image to a food the entry merely matches', async () => {
+    const onClose = vi.fn();
+    const repository = new FakeRepository();
+    repository.library = [{ ...CHICKEN, imagePath: 'uid/chicken.jpg' }, COOKIE];
+    await renderForm({ onClose, repository });
+
+    fillNewFood('Chicken brea');
+    attachPhoto();
+    await screen.findByLabelText('View Chicken brea photo');
+
+    // Completing the name onto an existing food withdraws the control
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chicken breast' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addFoodCalls).toHaveLength(0);
+    expect(repository.imageUploads).toHaveLength(0);
+    expect(repository.addEntryCalls[0]).toMatchObject({ foodId: 'food-chicken' });
   });
 });

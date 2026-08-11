@@ -30,10 +30,11 @@ import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
 import { BulkPhotoOverlay } from './BulkPhotoOverlay';
 import { ClearableInput, ClearableTextarea } from './ClearableInput';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
-import { FoodThumbnail } from './FoodThumbnail';
+import { FoodThumbnail, PhotoThumbnail } from './FoodThumbnail';
 import { IdentifyOverlay } from './IdentifyOverlay';
 import { LogMealSheet } from './LogMealSheet';
 import { NumberInput } from './NumberInput';
+import { PhotoCapture } from './PhotoCapture';
 import { TextLogOverlay } from './TextLogOverlay';
 
 export interface EntryFormProps {
@@ -161,6 +162,14 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   );
   const [recipe, setRecipe] = useState('');
   const [recipeOpen, setRecipeOpen] = useState(false);
+  /**
+   * Photo for the food this entry would capture, held as a data URL until the
+   * entry is saved — there is no food to upload it to before then. Only ever
+   * set while the form is defining a new food; dropped as soon as it isn't.
+   */
+  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
+  /** Camera/file overlay for choosing that photo is open */
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
   /** Collapsed disclosure for a matched food's existing recipe */
   const [viewingRecipe, setViewingRecipe] = useState(false);
   const [suggestions, setSuggestions] = useState<MealSuggestions | null>(null);
@@ -269,6 +278,18 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   // (covers clearing a selected food's name and starting a fresh one).
   useEffect(() => {
     if (showAnchorEditor) setNutritionOpen(true);
+  }, [showAnchorEditor]);
+
+  // Once the form is no longer defining a new food there is nothing to attach a
+  // held photo to, so it goes. Deriving this from the same flag that gates the
+  // control covers every way out — picking a food from the dropdown, typing a
+  // name that comes to match one, switching to quick calories — without a clear
+  // at each call site, one of which would eventually be missed.
+  useEffect(() => {
+    if (!showAnchorEditor) {
+      setPendingPhoto(null);
+      setCapturingPhoto(false);
+    }
   }, [showAnchorEditor]);
 
   // Each time the library-anchor editor opens, reseed it from the matched
@@ -421,14 +442,18 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
 
   /**
    * An accepted AI estimate fills the form in place as a new one-serving food,
-   * mirroring what a search prefill seeds at mount.
+   * mirroring what a search prefill seeds at mount. The analyzed photo, when
+   * there is one, becomes the held photo for the food this would capture — so
+   * a food identified from a photo the library didn't know keeps it. Callers
+   * without an image clear it rather than leave a stale one behind.
    */
-  function applyEstimate(result: FoodSearchResult) {
+  function applyEstimate(result: FoodSearchResult, image?: string) {
     setFoodId(undefined);
     setDescription('');
     setRecipe('');
     setRecipeOpen(false);
     setViewingRecipe(false);
+    setPendingPhoto(image ?? null);
     setAnchorFields(anchorToFields(result));
     setAiEstimatedWeight(false);
     setAiPrefilled(true);
@@ -542,6 +567,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           // A brand-new (unmatched) food is flagged as it is captured; an
           // already-linked food is flagged via updateFood below.
           skipMacroCheck: consented && !matchedFood ? true : undefined,
+          // Only ever set while defining a new food, and used only by the
+          // capture branch — a matched food keeps the image it already has.
+          imageDataUrl: pendingPhoto ?? undefined,
         });
       }
       // Update the linked library food when the anchor editor changed it and/or
@@ -573,6 +601,61 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
       setSaving(false);
     }
   }
+
+  /** Names the photo for assistive tech before the food has a name of its own. */
+  const photoName = values.name.trim() || 'new food';
+
+  /** One field, rendered by whichever head the form is showing. */
+  const nameCombobox = (
+    <FoodNameCombobox
+      inputId={nameInputId}
+      value={values.name}
+      onChange={(name) => {
+        setField('name', name);
+        setFoodId(undefined);
+      }}
+      groups={groups}
+      meals={mealMatches}
+      actions={actions}
+      onSelectFood={selectFood}
+      onSelectMeal={setLoggingMeal}
+      renderThumb={(food) => <FoodThumbnail food={food} className="combobox-thumb" />}
+      // A prefilled or edited name is settled; don't pop the dropdown
+      // and mobile keyboard until the user taps the field themselves
+      autoFocus={!editing && !prefill}
+    />
+  );
+
+  /** Replace/remove icons, shown over the enlarged pending photo. */
+  const photoActions = (close: () => void) => (
+    <>
+      <button
+        type="button"
+        className="food-photo-icon"
+        aria-label="Replace photo"
+        title="Replace photo"
+        onClick={() => {
+          close();
+          setCapturingPhoto(true);
+        }}
+      >
+        ✏️
+      </button>
+      <button
+        type="button"
+        className="food-photo-icon"
+        aria-label="Remove photo"
+        title="Remove photo"
+        onClick={() => {
+          close();
+          // Nothing has been uploaded yet, so dropping it is all that's needed
+          setPendingPhoto(null);
+        }}
+      >
+        🗑️
+      </button>
+    </>
+  );
 
   return (
     <div
@@ -636,9 +719,63 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             <span className="field-label">Name</span>
             <p className="quick-entry-name">Calories</p>
           </div>
+        ) : showAnchorEditor ? (
+          /* Defining a new food: the same head as the library's add-food form —
+             photo column beside the name and description, each label sitting
+             directly over its own field. */
+          <div className="food-edit-head">
+            <div className="food-photo-col">
+              <div className="food-photo-block">
+                {pendingPhoto ? (
+                  <PhotoThumbnail
+                    url={pendingPhoto}
+                    name={photoName}
+                    className="food-photo-preview"
+                    enlargeable
+                    renderActions={photoActions}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="food-photo-add"
+                    aria-label="Add photo"
+                    title="Add photo"
+                    onClick={() => setCapturingPhoto(true)}
+                  >
+                    📷
+                  </button>
+                )}
+              </div>
+              {!recipeOpen && (
+                <button
+                  type="button"
+                  className="link-button food-recipe-toggle"
+                  onClick={() => setRecipeOpen(true)}
+                >
+                  + Add recipe
+                </button>
+              )}
+            </div>
+            <div className="food-edit-fields">
+              {/* label references the input by id: the popup listbox must not sit
+                  inside the <label>, or its options become part of the field's name */}
+              <div className="field">
+                <label htmlFor={nameInputId}>Name</label>
+                {nameCombobox}
+                {errors.name && <span className="field-error">{errors.name}</span>}
+              </div>
+              <label>
+                Description (optional)
+                <ClearableInput
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Brand, prep, weights"
+                  clearLabel="Clear description"
+                />
+              </label>
+            </div>
+          </div>
         ) : (
-        /* label references the input by id: the popup listbox must not sit
-            inside the <label>, or its options become part of the field's name */
         <div className="field">
           <label htmlFor={nameInputId}>Name</label>
           <div className="name-field-row">
@@ -646,23 +783,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
               <FoodThumbnail food={matchedFood} className="name-field-thumb" enlargeable />
             )}
             <div className="name-field-body">
-              <FoodNameCombobox
-                inputId={nameInputId}
-                value={values.name}
-                onChange={(name) => {
-                  setField('name', name);
-                  setFoodId(undefined);
-                }}
-                groups={groups}
-                meals={mealMatches}
-                actions={actions}
-                onSelectFood={selectFood}
-                onSelectMeal={setLoggingMeal}
-                renderThumb={(food) => <FoodThumbnail food={food} className="combobox-thumb" />}
-                // A prefilled or edited name is settled; don't pop the dropdown
-                // and mobile keyboard until the user taps the field themselves
-                autoFocus={!editing && !prefill}
-              />
+              {nameCombobox}
               {errors.name && <span className="field-error">{errors.name}</span>}
               {matchedFood?.description && (
                 <span className="combobox-selected-desc">{matchedFood.description}</span>
@@ -686,17 +807,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
 
         {showAnchorEditor && (
           <>
-            <label>
-              Description (optional)
-              <ClearableInput
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brand, prep, weights — saved to your food library"
-                clearLabel="Clear description"
-              />
-            </label>
-
-            {recipeOpen ? (
+            {recipeOpen && (
               <label>
                 Recipe (optional)
                 <ClearableTextarea
@@ -707,10 +818,6 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
                   clearLabel="Clear recipe"
                 />
               </label>
-            ) : (
-              <button type="button" className="link-button" onClick={() => setRecipeOpen(true)}>
-                + Add recipe
-              </button>
             )}
           </>
         )}
@@ -945,6 +1052,18 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           initialNote={estimateHandoff.note}
           onAccept={applyEstimate}
           onCancel={() => setEstimateHandoff(null)}
+        />
+      )}
+
+      {capturingPhoto && (
+        <PhotoCapture
+          onCapture={(dataUrl) => {
+            setCapturingPhoto(false);
+            // Held, not uploaded: there is no captured food to attach it to
+            // until this entry is saved.
+            setPendingPhoto(dataUrl);
+          }}
+          onCancel={() => setCapturingPhoto(false)}
         />
       )}
     </div>

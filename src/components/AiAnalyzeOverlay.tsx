@@ -20,7 +20,14 @@ type Phase =
   | { kind: 'refine-error'; estimate: FoodEstimate; message: string; failedCorrection: string };
 
 interface AiAnalyzeOverlayProps {
-  onAccept: (result: FoodSearchResult) => void;
+  /**
+   * The analyzed photo comes along with the estimate so a host that can hold it
+   * may offer it as the photo for a food captured from the resulting entry. It
+   * is deliberately not part of `FoodSearchResult`: hosts that navigate on
+   * accept carry that type through router state, which is no place for a
+   * base64 JPEG. A host with nowhere to put it simply ignores it.
+   */
+  onAccept: (result: FoodSearchResult, image: string) => void;
   onCancel: () => void;
   /** Rendered under camera/analysis errors (e.g. a manual-entry link). */
   fallback?: ReactNode;
@@ -217,7 +224,7 @@ export function AiAnalyzeOverlay({
               type="button"
               className="ai-accept"
               disabled={busy}
-              onClick={() => onAccept(mapEstimateToResult(estimate))}
+              onClick={() => image && onAccept(mapEstimateToResult(estimate), image)}
             >
               Use this estimate
             </button>

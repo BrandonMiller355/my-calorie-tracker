@@ -182,15 +182,16 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 /**
- * addEntry input: `description`, `recipe`, and `skipMacroCheck` are not stored
- * on the entry — they seed the library food when the entry is auto-captured as
- * a new food. Exception: quick entries (source 'quick') skip capture entirely
- * and keep their description on the entry itself.
+ * addEntry input: `description`, `recipe`, `skipMacroCheck`, and `imageDataUrl`
+ * are not stored on the entry — they seed the library food when the entry is
+ * auto-captured as a new food. Exception: quick entries (source 'quick') skip
+ * capture entirely and keep their description on the entry itself.
  */
 export type NewEntryInput = Omit<FoodEntry, 'id'> & {
   description?: string;
   recipe?: string;
   skipMacroCheck?: boolean;
+  imageDataUrl?: string;
 };
 
 export interface AppContextValue extends AppState {
@@ -431,9 +432,32 @@ export function AppProvider({
 
   useRefreshOnReturn(refreshStaleData);
 
+  /**
+   * Uploads a photo for a food and records the resulting path on it. Takes the
+   * food itself rather than an id so a just-added food — not yet in `state.foods`
+   * as far as this closure can see — still gets its image applied.
+   */
+  const applyFoodImage = useCallback(
+    async (food: LibraryFood, dataUrl: string) => {
+      // Best-effort: an upload failure must never disturb the primary action
+      // (logging an entry, saving a food, or resolving a match), so it is
+      // swallowed here rather than surfaced as a rejection.
+      try {
+        const imagePath = await repository.uploadFoodImage(food.id, dataUrlToBlob(dataUrl));
+        // A replace reuses the same object key, so the cached signed URL must be
+        // dropped or the old image would linger until a reload.
+        invalidateFoodImage(imagePath);
+        dispatch({ type: 'food-updated', food: { ...food, imagePath } });
+      } catch {
+        // no-op; the food simply keeps whatever image it had (often none)
+      }
+    },
+    [repository],
+  );
+
   const addEntry = useCallback(
     async (input: NewEntryInput) => {
-      const { description, recipe, skipMacroCheck, ...entryInput } = input;
+      const { description, recipe, skipMacroCheck, imageDataUrl, ...entryInput } = input;
       // Quick calories-only entries never create, match, or link a library
       // food — even if one named "Calories" exists.
       if (entryInput.source === 'quick') {
@@ -474,8 +498,13 @@ export function AppProvider({
             await repository.addFood(food);
             dispatch({ type: 'food-added', food });
             foodId = food.id;
+            // Only a food captured here can take the form's photo — a matched
+            // food keeps whatever image it already has. Fire-and-forget, so the
+            // upload never delays or blocks logging the entry below.
+            if (imageDataUrl) void applyFoodImage(food, imageDataUrl);
           } catch {
             // Best-effort: save the entry unlinked; a later log can capture it.
+            // With no food to attach it to, the photo is dropped with it.
           }
         }
       }
@@ -483,7 +512,7 @@ export function AppProvider({
       await repository.addEntry(entry);
       dispatch({ type: 'entry-added', entry });
     },
-    [repository, state.foods],
+    [repository, state.foods, applyFoodImage],
   );
 
   const updateEntry = useCallback(
@@ -522,29 +551,6 @@ export function AppProvider({
     await repository.clearGoalsForDate(state.date);
     dispatch({ type: 'day-goal-cleared' });
   }, [repository, state.date]);
-
-  /**
-   * Uploads a photo for a food and records the resulting path on it. Takes the
-   * food itself rather than an id so a just-added food — not yet in `state.foods`
-   * as far as this closure can see — still gets its image applied.
-   */
-  const applyFoodImage = useCallback(
-    async (food: LibraryFood, dataUrl: string) => {
-      // Best-effort: an upload failure must never disturb the primary action
-      // (logging an entry, saving a food, or resolving a match), so it is
-      // swallowed here rather than surfaced as a rejection.
-      try {
-        const imagePath = await repository.uploadFoodImage(food.id, dataUrlToBlob(dataUrl));
-        // A replace reuses the same object key, so the cached signed URL must be
-        // dropped or the old image would linger until a reload.
-        invalidateFoodImage(imagePath);
-        dispatch({ type: 'food-updated', food: { ...food, imagePath } });
-      } catch {
-        // no-op; the food simply keeps whatever image it had (often none)
-      }
-    },
-    [repository],
-  );
 
   const addFood = useCallback(
     async (input: Omit<LibraryFood, 'id'>, imageDataUrl?: string) => {
