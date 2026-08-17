@@ -378,8 +378,10 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
 
 function MealsTab({
   onEdit,
+  onNewMeal,
 }: {
   onEdit: (meal: SavedMeal) => void;
+  onNewMeal: () => void;
 }) {
   const { meals, foods, archiveMeal } = useAppState();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -401,11 +403,28 @@ function MealsTab({
     archiveMeal(meal.id).catch(() => setArchiveFailed(true));
   }
 
+  // A meal needs at least two foods to combine, so the button only appears
+  // once the library has enough to work with.
+  const canCreate = foods.length >= 2;
+
+  const newMealButton = canCreate && (
+    <div className="foods-actions">
+      <button type="button" className="new-meal-button" onClick={onNewMeal}>
+        + New meal
+      </button>
+    </div>
+  );
+
   if (meals.length === 0) {
     return (
-      <p className="search-hint">
-        No meals yet — pick “Select” under Foods to combine foods into a meal.
-      </p>
+      <>
+        {newMealButton}
+        <p className="search-hint">
+          {canCreate
+            ? 'No meals yet — tap “+ New meal” to combine foods into a meal.'
+            : 'No meals yet — add at least two foods to combine them into a meal.'}
+        </p>
+      </>
     );
   }
 
@@ -416,6 +435,8 @@ function MealsTab({
 
   return (
     <>
+      {newMealButton}
+
       {archiveFailed && (
         <p className="error-banner" role="alert">
           Couldn’t archive the meal — it was not removed. Check your connection and try again.
@@ -587,15 +608,6 @@ export function FoodsScreen() {
             <button type="button" className="add-food-button" onClick={() => setForm({ kind: 'create' })}>
               + Add food item
             </button>
-            {foods.length >= 2 && !selecting && (
-              <button
-                type="button"
-                className="new-meal-button"
-                onClick={() => setSelecting(true)}
-              >
-                + New meal
-              </button>
-            )}
           </div>
 
           {selecting && (
@@ -728,7 +740,15 @@ export function FoodsScreen() {
           )}
         </>
       ) : (
-        <MealsTab onEdit={(meal) => setMealForm({ kind: 'edit', meal })} />
+        <MealsTab
+          onEdit={(meal) => setMealForm({ kind: 'edit', meal })}
+          onNewMeal={() => {
+            // Foods are picked against the library, which lives on the Foods
+            // tab, so building a new meal starts by switching there in select mode.
+            setTab('foods');
+            setSelecting(true);
+          }}
+        />
       )}
 
       {form && (

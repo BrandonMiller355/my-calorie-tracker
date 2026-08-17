@@ -442,8 +442,11 @@ const OATS_AND_TOAST: SavedMeal = {
 };
 
 /** Enter multi-select mode and tick the named foods, searching for each in turn —
- *  select mode lists nothing until the search narrows the library. */
+ *  select mode lists nothing until the search narrows the library. The "+ New
+ *  meal" button lives on the Meals tab and drops back into the Foods tab in
+ *  select mode. */
 async function selectFoods(...names: string[]) {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
   fireEvent.click(await screen.findByText('+ New meal'));
   const filter = screen.getByLabelText('Filter your library');
   for (const name of names) {
@@ -452,6 +455,39 @@ async function selectFoods(...names: string[]) {
   }
   fireEvent.change(filter, { target: { value: '' } });
 }
+
+describe('FoodsScreen new meal button placement', () => {
+  it('hides "+ New meal" on the Foods tab and shows it on the Meals tab', async () => {
+    renderFoods([PBJ, OATMEAL]);
+
+    // The Foods tab is the default; the meal entry point is not here.
+    await screen.findByText('+ Add food item');
+    expect(screen.queryByText('+ New meal')).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+    expect(await screen.findByText('+ New meal')).toBeInTheDocument();
+  });
+
+  it('starts a new meal in Foods select mode from the Meals tab', async () => {
+    renderFoods([PBJ, OATMEAL]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+    fireEvent.click(await screen.findByText('+ New meal'));
+
+    // We land back on the Foods tab in select mode, ready to pick foods.
+    expect(screen.getByRole('tab', { name: 'Foods' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Filter your library')).toBeInTheDocument();
+  });
+
+  it('withholds "+ New meal" until the library has at least two foods', async () => {
+    renderFoods([PBJ]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
+
+    expect(screen.queryByText('+ New meal')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('No meals yet — add at least two foods to combine them into a meal.'),
+    ).toBeInTheDocument();
+  });
+});
 
 describe('FoodsScreen meal builder', () => {
   it('creates a meal from a multi-selection, seeded at 1 serving each', async () => {
@@ -494,6 +530,7 @@ describe('FoodsScreen meal builder', () => {
 
   it('lists no foods until the search narrows them, keeping ticks across searches', async () => {
     renderFoods([PBJ, OATMEAL]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Meals' }));
     fireEvent.click(await screen.findByText('+ New meal'));
 
     // Nothing is listed up front — the library would bury the create button.
