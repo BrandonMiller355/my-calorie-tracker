@@ -738,62 +738,53 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             <span className="field-label">Name</span>
             <p className="quick-entry-name">Calories</p>
           </div>
-        ) : showAnchorEditor ? (
-          <div className="food-edit-head">
-            <div className="food-photo-col">
-              <div className="food-photo-block">
-                {pendingPhoto ? (
-                  <PhotoThumbnail
-                    url={pendingPhoto}
-                    name={photoName}
-                    className="food-photo-preview"
-                    enlargeable
-                    renderActions={photoActions}
-                  />
-                ) : (
+        ) : (
+          /* One tree for both "defining a new food" and "matched to the
+             library" — only the panel styling, photo slot, and the block
+             beneath the name field differ. Kept as one tree (rather than two
+             branches) so selecting a food, which flips showAnchorEditor,
+             doesn't unmount the name field mid-flow: that used to drop focus,
+             which on mobile re-triggered the keyboard and reopened the
+             dropdown right after the pick. */
+          <div className={showAnchorEditor ? 'food-edit-head' : 'name-field-row'}>
+            {showAnchorEditor ? (
+              <div className="food-photo-col">
+                <div className="food-photo-block">
+                  {pendingPhoto ? (
+                    <PhotoThumbnail
+                      url={pendingPhoto}
+                      name={photoName}
+                      className="food-photo-preview"
+                      enlargeable
+                      renderActions={photoActions}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="food-photo-add"
+                      aria-label="Add photo"
+                      title="Add photo"
+                      onClick={() => setCapturingPhoto(true)}
+                    >
+                      📷
+                    </button>
+                  )}
+                </div>
+                {!recipeOpen && (
                   <button
                     type="button"
-                    className="food-photo-add"
-                    aria-label="Add photo"
-                    title="Add photo"
-                    onClick={() => setCapturingPhoto(true)}
+                    className="link-button food-recipe-toggle"
+                    onClick={() => setRecipeOpen(true)}
                   >
-                    📷
+                    + Add recipe
                   </button>
                 )}
               </div>
-              {!recipeOpen && (
-                <button
-                  type="button"
-                  className="link-button food-recipe-toggle"
-                  onClick={() => setRecipeOpen(true)}
-                >
-                  + Add recipe
-                </button>
-              )}
-            </div>
-            <div className="food-edit-fields">
-              <div className="field">
-                <label htmlFor={nameInputId}>Name</label>
-                {nameCombobox}
-                {errors.name && <span className="field-error">{errors.name}</span>}
-              </div>
-              <label>
-                Description (optional)
-                <ClearableInput
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brand, prep, weights"
-                  clearLabel="Clear description"
-                />
-              </label>
-            </div>
-          </div>
-        ) : (
-        <div className="field">
-          <label htmlFor={nameInputId}>Name</label>
-          <div className="name-field-row">
-            {matchedFood &&
+            ) : (
+              // The photo is part of the library food, so it becomes editable
+              // exactly when the rest of that food does — under "Edit
+              // nutrition". Otherwise it's a look-only thumbnail.
+              matchedFood &&
               (matchedFood.imagePath ? (
                 <FoodThumbnail
                   food={matchedFood}
@@ -813,28 +804,47 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
                     📷
                   </button>
                 )
-              ))}
-            <div className="name-field-body">
-              {nameCombobox}
-              {errors.name && <span className="field-error">{errors.name}</span>}
-              {matchedFood?.description && (
-                <span className="combobox-selected-desc">{matchedFood.description}</span>
-              )}
-              {matchedFood?.recipe && (
+              ))
+            )}
+            <div className={showAnchorEditor ? 'food-edit-fields' : 'name-field-body'}>
+              {/* label references the input by id: the popup listbox must not sit
+                  inside the <label>, or its options become part of the field's name */}
+              <div className="field">
+                <label htmlFor={nameInputId}>Name</label>
+                {nameCombobox}
+                {errors.name && <span className="field-error">{errors.name}</span>}
+              </div>
+              {showAnchorEditor ? (
+                <label>
+                  Description (optional)
+                  <ClearableInput
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Brand, prep, weights"
+                    clearLabel="Clear description"
+                  />
+                </label>
+              ) : (
                 <>
-                  <button
-                    type="button"
-                    className="link-button name-field-recipe-toggle"
-                    onClick={() => setViewingRecipe((v) => !v)}
-                  >
-                    {viewingRecipe ? 'Hide recipe' : 'View recipe'}
-                  </button>
-                  {viewingRecipe && <p className="food-recipe">{matchedFood.recipe}</p>}
+                  {matchedFood?.description && (
+                    <span className="combobox-selected-desc">{matchedFood.description}</span>
+                  )}
+                  {matchedFood?.recipe && (
+                    <>
+                      <button
+                        type="button"
+                        className="link-button name-field-recipe-toggle"
+                        onClick={() => setViewingRecipe((v) => !v)}
+                      >
+                        {viewingRecipe ? 'Hide recipe' : 'View recipe'}
+                      </button>
+                      {viewingRecipe && <p className="food-recipe">{matchedFood.recipe}</p>}
+                    </>
+                  )}
                 </>
               )}
             </div>
           </div>
-        </div>
         )}
 
         {showAnchorEditor && (

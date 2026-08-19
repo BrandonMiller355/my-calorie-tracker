@@ -570,6 +570,27 @@ describe('EntryForm name search ordering', () => {
     expect(options[0]).toHaveTextContent('Apple pie');
     expect(options[1]).toHaveTextContent('Apple crumble');
   });
+
+  it('closes the dropdown and drops focus after tapping a food, and does not reopen it', async () => {
+    const repository = new FakeRepository();
+    repository.library = [CHICKEN];
+    await renderForm({ repository });
+
+    // The typed text is a partial match, so the food isn't linked yet — this
+    // is what flips the head from "defining a new food" to "matched to the
+    // library" at the moment of picking. That used to remount the name field
+    // mid-click and, since the fresh input auto-focused, reopen the dropdown
+    // right behind the pick.
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'chick' } });
+    const option = within(screen.getByRole('listbox'))
+      .getAllByRole('option')
+      .find((o) => o.textContent?.includes('Chicken breast'))!;
+    fireEvent.mouseDown(option);
+    fireEvent.click(option);
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(document.activeElement).not.toBe(screen.getByLabelText('Name'));
+  });
 });
 
 const QUICK_ENTRY: FoodEntry = {
