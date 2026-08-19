@@ -5,6 +5,7 @@ import {
   subscribeFoodImages,
 } from '../lib/foodImageCache';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
 import type { LibraryFood } from '../types';
 
 /**
@@ -93,15 +94,9 @@ export function PhotoThumbnail({
 }) {
   const [enlarged, setEnlarged] = useState(false);
 
-  // Close the enlarged view on Escape, matching the other overlays.
-  useEffect(() => {
-    if (!enlarged) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setEnlarged(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [enlarged]);
+  // Back (and Escape, through the same stack) returns to whatever the photo was
+  // opened from, rather than leaving the app.
+  useBackHandler(enlarged, () => setEnlarged(false));
 
   const img = <img src={url} alt={name} className={className ?? 'food-thumb'} />;
   if (!enlargeable) return img;

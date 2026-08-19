@@ -14,6 +14,8 @@ import { NumberInput } from '../components/NumberInput';
 import { PhotoCapture } from '../components/PhotoCapture';
 import { FoodThumbnail, PhotoThumbnail } from '../components/FoodThumbnail';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
+import { useSwipeToDismiss } from '../lib/useSwipeToDismiss';
 import { DEFAULT_SERVING_LABEL, type LibraryFood, type SavedMeal } from '../types';
 
 type FormMode = { kind: 'create' } | { kind: 'edit'; food: LibraryFood } | null;
@@ -52,6 +54,9 @@ function describeAnchor(food: LibraryFood): string {
 }
 
 function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => void }) {
+  // Back closes the editor and leaves the Foods tab where it is.
+  useBackHandler(true, onClose);
+  const { sheetStyle, handleProps } = useSwipeToDismiss(onClose);
   const { foods, addFood, updateFood, setFoodImage, removeFoodImage } = useAppState();
   const [values, setValues] = useState<FoodFormValues>(toFormValues(editing));
   const [errors, setErrors] = useState<FoodFormErrors>({});
@@ -192,8 +197,9 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
         aria-label={editing ? 'Edit library food' : 'Add library food'}
+        style={sheetStyle}
       >
-        <div className="sheet-handle" aria-hidden="true" />
+        <div className="sheet-handle" aria-hidden="true" {...handleProps} />
         <h2>{editing ? 'Edit food' : 'Add food item'}</h2>
 
         <div className="food-edit-head">

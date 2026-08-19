@@ -1,3 +1,4 @@
+import { useBackHandler } from '../state/BackNavigation';
 import { ClearableTextarea } from './ClearableInput';
 
 /**
@@ -25,6 +26,10 @@ export function PhotoConfirm({
   onCancel,
   sendLabel,
 }: PhotoConfirmProps) {
+  // Back steps this phase back to the camera rather than abandoning the flow —
+  // the review step's own "Retake" is what it means to go back from here.
+  useBackHandler(true, onRetake);
+
   return (
     <div className="scanner-overlay" role="dialog" aria-label="Review photo before sending">
       <div className="ai-confirm">

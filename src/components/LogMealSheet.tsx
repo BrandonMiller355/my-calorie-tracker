@@ -2,6 +2,8 @@ import { useId, useState } from 'react';
 import { resolveMeal } from '../lib/meal';
 import { unitLabel } from '../lib/units';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
+import { useSwipeToDismiss } from '../lib/useSwipeToDismiss';
 import { MEALS, MEAL_LABELS, type Meal, type SavedMeal } from '../types';
 import { NumberInput } from './NumberInput';
 
@@ -40,6 +42,8 @@ function parsePortion(raw: string): number | null {
  * skipped; when none resolve, logging is disabled.
  */
 export function LogMealSheet({ meal, date, defaultSlot, onLogged, onCancel }: LogMealSheetProps) {
+  useBackHandler(true, onCancel);
+  const { sheetStyle, handleProps } = useSwipeToDismiss(onCancel);
   const { foods, logMeal } = useAppState();
   const [slot, setSlot] = useState<Meal>(defaultSlot);
   const [portionText, setPortionText] = useState('1');
@@ -74,8 +78,8 @@ export function LogMealSheet({ meal, date, defaultSlot, onLogged, onCancel }: Lo
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div className="entry-form" role="dialog" aria-label={`Log ${meal.name}`}>
-        <div className="sheet-handle" aria-hidden="true" />
+      <div className="entry-form" role="dialog" aria-label={`Log ${meal.name}`} style={sheetStyle}>
+        <div className="sheet-handle" aria-hidden="true" {...handleProps} />
         <h2>Log {meal.name}</h2>
 
         <fieldset className="segmented-field" aria-label="Meal slot">

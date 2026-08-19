@@ -5,6 +5,7 @@ import { loadImageFile } from '../lib/photo';
 import { round1 } from '../lib/totals';
 import { availableUnits, deriveQuantity, unitLabel } from '../lib/units';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
 import { MEALS, MEAL_LABELS, type LibraryFood, type Meal } from '../types';
 import { NumberInput } from './NumberInput';
 
@@ -98,6 +99,11 @@ export function BulkPhotoOverlay({ foods, date, meal, onLogged, onCancel }: Bulk
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // No step back from the review list: re-picking replaces the whole batch, so
+  // the only earlier phase would throw away the identifications already paid
+  // for. Back means cancel here, exactly like the overlay's own Cancel.
+  useBackHandler(true, onCancel);
 
   // The header action's tap is the user gesture; open the gallery right away.
   // The visible button below covers browsers that swallow the synthetic click

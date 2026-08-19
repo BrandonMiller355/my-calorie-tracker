@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 import { getProductByBarcode, searchFoods } from './api/openFoodFacts';
@@ -741,18 +741,24 @@ describe('Search escalation round trip', () => {
     expect(within(form).getByRole('radio', { name: 'Lunch' })).toBeChecked();
   });
 
-  it('standalone search still hands off with the default meal', async () => {
+  it('standalone search still hands off with the time-of-day default meal', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-07-06T18:00:00'));
     vi.mocked(searchFoods).mockResolvedValue([granola]);
-    renderApp(new FakeRepository(), ['/search']);
+    try {
+      renderApp(new FakeRepository(), ['/search']);
 
-    fireEvent.change(await screen.findByPlaceholderText(/Open Food Facts/), {
-      target: { value: 'granola' },
-    });
-    fireEvent.click(await screen.findByRole('button', { name: /Granola/ }));
+      fireEvent.change(await screen.findByPlaceholderText(/Open Food Facts/), {
+        target: { value: 'granola' },
+      });
+      fireEvent.click(await screen.findByRole('button', { name: /Granola/ }));
 
-    const form = await screen.findByRole('form', { name: 'Log food entry' });
-    expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
-    expect(within(form).getByRole('radio', { name: 'Snacks' })).toBeChecked();
+      const form = await screen.findByRole('form', { name: 'Log food entry' });
+      expect(within(form).getByLabelText('Name')).toHaveValue('Granola');
+      expect(within(form).getByRole('radio', { name: 'Dinner' })).toBeChecked();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('offers a retry after a failed search, which recovers without retyping', async () => {
@@ -1220,5 +1226,98 @@ describe('App (backend failure handling)', () => {
     expect(await screen.findByText(/was not removed/i)).toBeInTheDocument();
     expect(screen.getByText('Chips')).toBeInTheDocument();
     expect(screen.getByText('1850 kcal left')).toBeInTheDocument();
+  });
+});
+
+describe('Back navigation', () => {
+  /** The platform back signal, as the browser delivers it. */
+  function pressBack() {
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  }
+
+  it('closes the suggestion list first, then the form, discarding what was typed', async () => {
+    renderApp(new FakeRepository());
+
+    const section = await screen.findByRole('region', { name: 'Snacks' });
+    fireEvent.click(within(section).getByText('+ Log food'));
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Half-typed' } });
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+    // The open list is the topmost layer, so it goes first — the form stays put
+    pressBack();
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.getByLabelText('Name')).toHaveValue('Half-typed');
+
+    pressBack();
+    expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull();
+    // Discarded rather than logged, and the log is where it was
+    expect(screen.queryByText('Half-typed')).toBeNull();
+    expect(screen.getByText('2000 kcal left')).toBeInTheDocument();
+  });
+
+  it('returns to today in one press, however many days were paged through', async () => {
+    renderApp(new FakeRepository());
+
+    fireEvent.click(await screen.findByLabelText('Previous day'));
+    fireEvent.click(screen.getByLabelText('Previous day'));
+    fireEvent.click(screen.getByLabelText('Previous day'));
+    expect(screen.getByLabelText('Pick a date')).not.toHaveValue(todayKey());
+
+    pressBack();
+
+    await waitFor(() => expect(screen.getByLabelText('Pick a date')).toHaveValue(todayKey()));
+    // The "Today" shortcut is only rendered off today, so it goes too
+    expect(screen.queryByRole('button', { name: 'Today' })).toBeNull();
+  });
+
+  it('unwinds a nested overlay before the form under it', async () => {
+    renderApp(new FakeRepository());
+
+    const section = await screen.findByRole('region', { name: 'Snacks' });
+    fireEvent.click(within(section).getByText('+ Log food'));
+    const form = await screen.findByRole('form', { name: 'Log food entry' });
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '3' } });
+    fireEvent.click(within(form).getByLabelText('Identify food from a photo'));
+    expect(await screen.findByRole('dialog', { name: 'Photograph food' })).toBeInTheDocument();
+
+    pressBack();
+
+    // The overlay went; the form and what was typed into it did not
+    expect(screen.queryByRole('dialog', { name: 'Photograph food' })).toBeNull();
+    expect(screen.getByLabelText('Amount')).toHaveValue('3');
+
+    pressBack();
+    expect(screen.queryByRole('form', { name: 'Log food entry' })).toBeNull();
+  });
+
+  it('closes a layer on another tab without leaving that tab, then returns to the log', async () => {
+    renderApp(new FakeRepository());
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Foods' }));
+    fireEvent.click(await screen.findByText('+ Add food item'));
+    expect(await screen.findByRole('form', { name: 'Add library food' })).toBeInTheDocument();
+
+    pressBack();
+
+    expect(screen.queryByRole('form', { name: 'Add library food' })).toBeNull();
+    // Still on Foods — the screen behind the layer was not swapped out
+    expect(screen.getByText('+ Add food item')).toBeInTheDocument();
+
+    pressBack();
+    expect(await screen.findByLabelText('Previous day')).toBeInTheDocument();
+  });
+
+  it('warns before exiting once there is nothing left to unwind', async () => {
+    renderApp(new FakeRepository());
+    await screen.findByLabelText('Previous day');
+
+    pressBack();
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Press back again to exit the application',
+    );
   });
 });

@@ -6,9 +6,11 @@ import { EntryForm } from '../components/EntryForm';
 import { MealSection } from '../components/MealSection';
 import { Summary } from '../components/Summary';
 import { WeeklyDeficit } from '../components/WeeklyDeficit';
+import { todayKey } from '../lib/date';
 import { currentMeal } from '../lib/mealTime';
 import { sumTotals } from '../lib/totals';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
 import { MEALS, type FoodEntry, type FoodSearchResult, type Meal } from '../types';
 
 type FormMode =
@@ -49,6 +51,13 @@ export function DayLogScreen() {
   const [mealOpenOverrides, setMealOpenOverrides] = useState<Partial<Record<Meal, boolean>>>({});
   const location = useLocation();
   const navigate = useNavigate();
+  const nowMeal = currentMeal();
+
+  // Back returns to today in one press, however many days were paged through —
+  // the same thing the day navigator's "Today" button does. Registered from
+  // here, so it can only ever apply while the log is the visible screen, and it
+  // sits below any layer opened later.
+  useBackHandler(date !== todayKey(), () => setDate(todayKey()));
 
   // Arriving from the search screen with a selected result (or manual fallback)
   useEffect(() => {
@@ -57,13 +66,12 @@ export function DayLogScreen() {
       setForm({ kind: 'prefill', prefill: state.prefill, meal: state.meal });
       navigate(location.pathname, { replace: true, state: null });
     } else if (state?.openManual) {
-      setForm({ kind: 'add', meal: state.meal ?? 'snacks' });
+      setForm({ kind: 'add', meal: state.meal ?? nowMeal });
       navigate(location.pathname, { replace: true, state: null });
     }
-  }, [location.state, location.pathname, navigate]);
+  }, [location.state, location.pathname, navigate, nowMeal]);
 
   const totals = sumTotals(entries);
-  const nowMeal = currentMeal();
 
   if (loadFailed) {
     return (

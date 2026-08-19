@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { TextLogOverlay } from './TextLogOverlay';
 import { AppProvider } from '../state/AppState';
 import { AuthProvider } from '../state/AuthProvider';
+import { BackNavigationProvider } from '../state/BackNavigation';
 import type { StorageRepository } from '../storage';
 import type {
   FoodEntry,
@@ -410,5 +412,62 @@ describe('TextLogOverlay review phase', () => {
 
     expect(onCancel).toHaveBeenCalled();
     expect(repository.addEntryCalls).toHaveLength(0);
+  });
+});
+
+describe('TextLogOverlay back handling', () => {
+  /** Same overlay, but under the provider that turns back presses into actions. */
+  async function renderWithBackNavigation() {
+    const repository = new FakeRepository();
+    const onCancel = vi.fn();
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <AppProvider repository={repository}>
+            <BackNavigationProvider>
+              <TextLogOverlay
+                foods={[BREAD, RICE]}
+                date="2026-07-10"
+                meal="lunch"
+                onSingleItem={vi.fn()}
+                onLogged={vi.fn()}
+                onCancel={onCancel}
+              />
+            </BackNavigationProvider>
+          </AppProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {});
+    return { onCancel };
+  }
+
+  function pressBack() {
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  }
+
+  it('steps the review list back to the description, which is still there', async () => {
+    logFromTextMock.mockResolvedValue([MATCH_BREAD, MATCH_RICE]);
+    const { onCancel } = await renderWithBackNavigation();
+
+    await send('bread and rice');
+    expect(screen.getByText('Add 2 entries')).toBeInTheDocument();
+
+    pressBack();
+
+    // Back to the input, with the typed description intact for another go
+    expect(screen.getByLabelText('What did you eat?')).toHaveValue('bread and rice');
+    expect(screen.queryByText('Add 2 entries')).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('closes the overlay from the description, where there is nothing to step back to', async () => {
+    const { onCancel } = await renderWithBackNavigation();
+
+    pressBack();
+
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 });

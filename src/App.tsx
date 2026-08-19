@@ -4,6 +4,7 @@ import { FoodsScreen } from './screens/FoodsScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { AppProvider } from './state/AppState';
+import { BackNavigationProvider } from './state/BackNavigation';
 import type { StorageRepository } from './storage';
 
 const ICON_PROPS = {
@@ -52,34 +53,39 @@ const SettingsIcon = () => (
 export default function App({ repository }: { repository: StorageRepository }) {
   return (
     <AppProvider repository={repository}>
-      <div className="app">
-        <main className="app-main">
-          <Routes>
-            <Route path="/" element={<DayLogScreen />} />
-            <Route path="/search" element={<SearchScreen />} />
-            <Route path="/foods" element={<FoodsScreen />} />
-            <Route path="/settings" element={<SettingsScreen />} />
-          </Routes>
-        </main>
-        <nav className="app-nav">
-          <NavLink to="/" end>
-            <LogIcon />
-            <span>Log</span>
-          </NavLink>
-          <NavLink to="/search">
-            <SearchIcon />
-            <span>Search</span>
-          </NavLink>
-          <NavLink to="/foods">
-            <FoodsIcon />
-            <span>Foods</span>
-          </NavLink>
-          <NavLink to="/settings">
-            <SettingsIcon />
-            <span>Settings</span>
-          </NavLink>
-        </nav>
-      </div>
+      <BackNavigationProvider>
+        <div className="app">
+          <main className="app-main">
+            <Routes>
+              <Route path="/" element={<DayLogScreen />} />
+              <Route path="/search" element={<SearchScreen />} />
+              <Route path="/foods" element={<FoodsScreen />} />
+              <Route path="/settings" element={<SettingsScreen />} />
+            </Routes>
+          </main>
+          {/* Tabs replace rather than push: back returns to the Log tab as the
+              start destination, so a trail of visited tabs would only get in
+              the way — and the back guard needs the history depth fixed. */}
+          <nav className="app-nav">
+            <NavLink to="/" replace end>
+              <LogIcon />
+              <span>Log</span>
+            </NavLink>
+            <NavLink to="/search" replace>
+              <SearchIcon />
+              <span>Search</span>
+            </NavLink>
+            <NavLink to="/foods" replace>
+              <FoodsIcon />
+              <span>Foods</span>
+            </NavLink>
+            <NavLink to="/settings" replace>
+              <SettingsIcon />
+              <span>Settings</span>
+            </NavLink>
+          </nav>
+        </div>
+      </BackNavigationProvider>
     </AppProvider>
   );
 }

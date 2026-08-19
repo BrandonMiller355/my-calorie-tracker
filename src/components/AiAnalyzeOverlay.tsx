@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { analyzeFood, mapEstimateToResult, type FoodEstimate } from '../api/analyzeFood';
+import { useBackHandler } from '../state/BackNavigation';
 import type { FoodSearchResult } from '../types';
 import { ClearableInput } from './ClearableInput';
 import { PhotoCapture } from './PhotoCapture';
@@ -61,6 +62,15 @@ export function AiAnalyzeOverlay({
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // The capture and confirm steps are their own layers and register their own
+  // handlers, so this one stands down for them rather than racing to be the
+  // topmost when both mount in the same commit — which is exactly what happens
+  // when the overlay opens straight into confirming with a handed-over photo.
+  useBackHandler(
+    !(phase.kind === 'capturing' || (phase.kind === 'confirming' && !!image)),
+    onCancel,
+  );
 
   /**
    * One analysis turn. `correction` distinguishes a refinement (whose failure

@@ -78,10 +78,12 @@ When a food has a photo, the library SHALL display it as a small thumbnail, retr
 - **WHEN** a food's image cannot be retrieved
 - **THEN** the food is shown in its normal text-only form and the rest of the list is unaffected
 
-### Requirement: Attach a photo while logging a new food
-The entry form SHALL offer attach, replace, and remove photo actions while it is defining a brand-new food — that is, while the form is not editing an existing entry, is not a quick calories-only entry, and its name does not match a library food. The actions SHALL obtain the image through the app's existing photo-source selection (camera capture or file selection) and downscale it through the shared pipeline, presented the same way as on the add-food form. The chosen photo SHALL be held only in the form until the entry is saved and the food is captured by the library's auto-capture behavior, and then attached to that captured food. Nothing SHALL be stored before the entry is saved.
+### Requirement: Attach a photo while logging
+The entry form SHALL offer attach, replace, and remove photo actions in two states: while it is defining a brand-new food — not editing an existing entry, not a quick calories-only entry, and its name does not match a library food — and while a matched library food's own fields are revealed for editing (the "Edit nutrition" state of the food-logging capability, which writes those fields back to that food). The actions SHALL obtain the image through the app's existing photo-source selection (camera capture or file selection) and downscale it through the shared pipeline, presented the same way as on the add-food form. A quick calories-only entry SHALL never offer them, and neither SHALL an entry with no library food behind it.
 
-When the form stops defining a new food — the user selects a library food, the name comes to match an existing food, or the form switches to a quick calories-only entry — the actions SHALL be withdrawn and any held photo discarded, since there is no new food left to attach it to. An entry that links to an existing library food SHALL attach nothing, leaving that food's photo (or absence of one) untouched.
+For a brand-new food the chosen photo SHALL be held only in the form until the entry is saved and the food is captured by the library's auto-capture behavior, and then attached to that captured food; nothing SHALL be stored before the entry is saved. For a matched food the photo belongs to a food that already exists, so attaching, replacing, or removing SHALL take effect on that food immediately and independently of whether the entry is saved — the same behavior as editing its photo on the Food Library screen.
+
+When the form stops defining a new food — the user selects a library food, the name comes to match an existing food, or the form switches to a quick calories-only entry — any held photo SHALL be discarded, since there is no new food left to attach it to, and the matched food's own photo SHALL be left untouched unless the user then acts on it deliberately.
 
 Attaching SHALL be non-blocking per this capability's upload requirement: the entry is logged and the food captured first, and a failed or in-flight upload MUST NOT delay the save, prevent the entry from being logged, or discard the captured food.
 
@@ -89,9 +91,13 @@ Attaching SHALL be non-blocking per this capability's upload requirement: the en
 - **WHEN** the user types a name the library does not know, chooses a photo in the entry form, and saves the entry
 - **THEN** the entry is logged, a library food is captured for that name, and the photo is uploaded to that food's private image path so the food thereafter shows it
 
-#### Scenario: No photo action for a matched food
-- **WHEN** the form's name matches an existing library food, whether selected from the dropdown or typed
-- **THEN** no attach action is offered in the entry form and that food's existing photo is left untouched
+#### Scenario: Matched food's photo is editable alongside its other fields
+- **WHEN** the form's name matches an existing library food, whether selected from the dropdown or typed, and that food's fields are revealed for editing
+- **THEN** its photo is offered for attaching, replacing, or removing beside the name, and the chosen change is applied to that library food straight away, whether or not the entry is then saved
+
+#### Scenario: Matched food's photo is look-only until its fields are revealed
+- **WHEN** the form's name matches an existing library food whose fields are still collapsed behind "Edit nutrition"
+- **THEN** that food's photo is shown as a thumbnail with no attach, replace, or remove action
 
 #### Scenario: Held photo dropped when the form stops defining a new food
 - **WHEN** the user chooses a photo while defining a new food and then selects an existing library food from the dropdown
@@ -101,9 +107,9 @@ Attaching SHALL be non-blocking per this capability's upload requirement: the en
 - **WHEN** the user chooses a photo in the entry form and then removes it, or closes the form without saving
 - **THEN** nothing is uploaded and no image is stored
 
-#### Scenario: No photo action when editing an entry or logging calories only
-- **WHEN** the user opens the form to edit an existing entry, or switches it to a quick calories-only entry
-- **THEN** no photo action is offered, because neither captures a new library food
+#### Scenario: No photo action for calories only or an entry with no library food
+- **WHEN** the user switches the form to a quick calories-only entry, or reveals the nutrition of an entry that links to no library food
+- **THEN** no photo action is offered, because there is no food for a photo to belong to
 
 #### Scenario: Logging is never held up by the upload
 - **WHEN** the user saves an entry that carries a photo for a newly captured food

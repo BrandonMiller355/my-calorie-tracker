@@ -7,6 +7,8 @@ import {
   type MealFormErrors,
 } from '../lib/validation';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
+import { useSwipeToDismiss } from '../lib/useSwipeToDismiss';
 import type { LibraryFood, SavedMeal } from '../types';
 import { ClearableInput } from './ClearableInput';
 import { NumberInput } from './NumberInput';
@@ -46,6 +48,8 @@ function rowCalories(component: MealComponentFormValue): number | null {
 }
 
 export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose: () => void }) {
+  useBackHandler(true, onClose);
+  const { sheetStyle, handleProps } = useSwipeToDismiss(onClose);
   const { foods, meals, addMeal, updateMeal } = useAppState();
   const editing = mode.kind === 'edit' ? mode.meal : undefined;
   const [name, setName] = useState(editing?.name ?? '');
@@ -134,8 +138,9 @@ export function MealBuilder({ mode, onClose }: { mode: MealBuilderMode; onClose:
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
         aria-label={editing ? 'Edit meal' : 'Create meal'}
+        style={sheetStyle}
       >
-        <div className="sheet-handle" aria-hidden="true" />
+        <div className="sheet-handle" aria-hidden="true" {...handleProps} />
         <h2>{editing ? 'Edit meal' : 'New meal'}</h2>
 
         <label>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { captureFrame, loadImageFile } from '../lib/photo';
+import { useBackHandler } from '../state/BackNavigation';
 
 function cameraErrorMessage(err: unknown): string {
   if (err instanceof DOMException && err.name === 'NotAllowedError') {
@@ -28,6 +29,7 @@ interface PhotoCaptureProps {
  * (same lifecycle rules as BarcodeScanner).
  */
 export function PhotoCapture({ onCapture, onCancel, fallback }: PhotoCaptureProps) {
+  useBackHandler(true, onCancel);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

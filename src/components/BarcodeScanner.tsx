@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useBackHandler } from '../state/BackNavigation';
 
 /** Retail product formats the detector must support for scanning to be offered. */
 const RETAIL_BARCODE_FORMATS = ['ean_13', 'upc_a', 'upc_e', 'ean_8'];
@@ -65,6 +66,7 @@ interface BarcodeScannerProps {
  * The camera stream is stopped on detection, cancel, and unmount.
  */
 export function BarcodeScanner({ onDetected, onCancel, fallback }: BarcodeScannerProps) {
+  useBackHandler(true, onCancel);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   // Kept in a ref so a parent re-render doesn't restart the camera effect.

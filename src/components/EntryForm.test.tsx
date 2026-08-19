@@ -188,6 +188,7 @@ class FakeRepository implements StorageRepository {
   updateFoodCalls: unknown[] = [];
   addFoodCalls: unknown[] = [];
   imageUploads: { foodId: string; blob: Blob }[] = [];
+  imageRemovals: string[] = [];
   library: LibraryFood[] = [CHICKEN, COOKIE];
   meals: SavedMeal[] = [];
   lastUsed: Record<string, string> = {};
@@ -225,7 +226,11 @@ class FakeRepository implements StorageRepository {
     this.imageUploads.push({ foodId, blob });
     return `uid/${foodId}.jpg`;
   }
-  async removeFoodImage(): Promise<void> {}
+  async removeFoodImage(foodId: string): Promise<void> {
+    this.imageRemovals.push(foodId);
+    const food = this.library.find((f) => f.id === foodId);
+    if (food) delete food.imagePath;
+  }
   async getFoodImageUrl(path: string): Promise<string> {
     return `signed:${path}`;
   }
@@ -1019,20 +1024,57 @@ describe('EntryForm photo for a captured food', () => {
     expect(repository.imageUploads[0].foodId).toBe(captured.id);
   });
 
-  it('offers no photo control for a matched food, when editing, or in quick mode', async () => {
+  it('offers no photo control in quick mode or for an entry with no library food', async () => {
     await renderForm();
     expect(screen.getByLabelText('Add photo')).toBeInTheDocument();
-
-    // Typing a name the library knows stops this being a new food
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chicken breast' } });
-    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
 
     enterQuickMode();
     expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
 
     cleanup();
+    // PB&J is not in the library, so revealing its nutrition still has no
+    // food to attach a photo to
     await renderForm({ editing: ENTRY });
     expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Edit nutrition'));
+    expect(screen.queryByLabelText('Add photo')).not.toBeInTheDocument();
+  });
+
+  it('attaches a photo to a matched library food right away', async () => {
+    const repository = await renderForm();
+
+    // Typing a name the library knows opens that food's own fields, photo included
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chicken breast' } });
+    attachPhoto();
+
+    // The food already exists, so the upload doesn't wait for the entry to save
+    await waitFor(() => expect(repository.imageUploads).toHaveLength(1));
+    expect(repository.imageUploads[0].foodId).toBe('food-chicken');
+    expect(repository.addFoodCalls).toHaveLength(0);
+    expect(await screen.findByLabelText('View Chicken breast photo')).toBeInTheDocument();
+  });
+
+  it('reveals a linked food’s photo controls with the rest of its fields', async () => {
+    const repository = new FakeRepository();
+    repository.library = [{ ...CHICKEN, imagePath: 'uid/food-chicken.jpg' }, COOKIE];
+    await renderForm({
+      editing: { ...ENTRY, name: 'Chicken breast', foodId: 'food-chicken' },
+      repository,
+    });
+
+    // Look-only while the entry's nutrition stays collapsed
+    fireEvent.click(await screen.findByLabelText('View Chicken breast photo'));
+    expect(screen.queryByLabelText('Remove photo')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('dialog', { name: 'Chicken breast photo' }));
+
+    fireEvent.click(screen.getByText('Edit nutrition'));
+    fireEvent.click(screen.getByLabelText('View Chicken breast photo'));
+    fireEvent.click(screen.getByLabelText('Remove photo'));
+
+    // Removal lands on the library food itself, not on this entry
+    await waitFor(() => expect(repository.imageRemovals).toEqual(['food-chicken']));
+    expect(await screen.findByLabelText('Add photo')).toBeInTheDocument();
+    expect(repository.updateEntryCalls).toHaveLength(0);
   });
 
   it('drops a held photo when a library food is picked from the dropdown', async () => {

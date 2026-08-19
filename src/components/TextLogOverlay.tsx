@@ -8,6 +8,7 @@ import {
 import { round1 } from '../lib/totals';
 import { availableUnits, deriveQuantity, unitLabel } from '../lib/units';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
 import { MEALS, MEAL_LABELS, type LibraryFood, type Meal } from '../types';
 import { ClearableTextarea } from './ClearableInput';
 import { NumberInput } from './NumberInput';
@@ -63,6 +64,11 @@ export function TextLogOverlay({
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Back out of the review list the same way "Edit description" does, so the
+  // typed text isn't lost; from the input itself there's nothing to step back
+  // to, so back closes the overlay.
+  useBackHandler(true, () => (phase === 'review' ? handleRefine() : onCancel()));
 
   async function parse(e: FormEvent) {
     e.preventDefault();

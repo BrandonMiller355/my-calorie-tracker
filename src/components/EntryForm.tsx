@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { IdentifiedAmount } from '../api/identifyFood';
 import { checkMacroCalories, macroMismatchMessage } from '../lib/macroCheck';
 import { findFoodByName, matchFoods, matchMeals } from '../lib/foodMatch';
+import { currentMeal } from '../lib/mealTime';
 import { availableUnits, deriveQuantity, MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
   validateEntryForm,
@@ -13,6 +14,8 @@ import {
   type ServingAnchorFormValues,
 } from '../lib/validation';
 import { useAppState } from '../state/AppState';
+import { useBackHandler } from '../state/BackNavigation';
+import { useSwipeToDismiss } from '../lib/useSwipeToDismiss';
 import {
   DEFAULT_SERVING_LABEL,
   MEALS,
@@ -128,13 +131,26 @@ function ServingAnchorFields({
 }
 
 export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: EntryFormProps) {
-  const { addEntry, updateEntry, updateFood, setFoodImage, foods, meals, foodLastUsed, getMealSuggestions } =
-    useAppState();
+  const {
+    addEntry,
+    updateEntry,
+    updateFood,
+    setFoodImage,
+    removeFoodImage,
+    foods,
+    meals,
+    foodLastUsed,
+    getMealSuggestions,
+  } = useAppState();
+  // Back discards in-progress input exactly as Cancel does — the two mean the
+  // same thing, so neither stops to confirm.
+  useBackHandler(true, onClose);
+  const { sheetStyle, handleProps } = useSwipeToDismiss(onClose);
   const navigate = useNavigate();
   const nameInputId = useId();
   const amountInputId = useId();
 
-  const [meal, setMeal] = useState<Meal>(editing?.meal ?? defaultMeal ?? 'snacks');
+  const [meal, setMeal] = useState<Meal>(editing?.meal ?? defaultMeal ?? currentMeal());
   /** Calories-only quick entry: no name/amount/serving, never touches the library */
   const [quick, setQuick] = useState(editing?.source === 'quick');
   const [values, setValues] = useState<EntryFormValues>({
@@ -626,7 +642,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
     />
   );
 
-  /** Replace/remove icons, shown over the enlarged pending photo. */
+  /** Replace/remove icons, shown over the enlarged photo in both heads. */
   const photoActions = (close: () => void) => (
     <>
       <button
@@ -648,8 +664,10 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         title="Remove photo"
         onClick={() => {
           close();
-          // Nothing has been uploaded yet, so dropping it is all that's needed
-          setPendingPhoto(null);
+          // A new food's photo is only held in the form, so dropping it is all
+          // that's needed; a matched food's photo is already stored on it.
+          if (showAnchorEditor) setPendingPhoto(null);
+          else if (matchedFood) void removeFoodImage(matchedFood.id);
         }}
       >
         🗑️
@@ -670,8 +688,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
         aria-label={editing ? 'Edit food entry' : 'Log food entry'}
+        style={sheetStyle}
       >
-        <div className="sheet-handle" aria-hidden="true" />
+        <div className="sheet-handle" aria-hidden="true" {...handleProps} />
         <div className="entry-form-header">
           <h2>{quick ? (editing ? 'Edit calories' : 'Log calories') : editing ? 'Edit food' : 'Log food'}</h2>
           {!editing && !quick && (
@@ -720,9 +739,6 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             <p className="quick-entry-name">Calories</p>
           </div>
         ) : showAnchorEditor ? (
-          /* Defining a new food: the same head as the library's add-food form —
-             photo column beside the name and description, each label sitting
-             directly over its own field. */
           <div className="food-edit-head">
             <div className="food-photo-col">
               <div className="food-photo-block">
@@ -757,8 +773,6 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
               )}
             </div>
             <div className="food-edit-fields">
-              {/* label references the input by id: the popup listbox must not sit
-                  inside the <label>, or its options become part of the field's name */}
               <div className="field">
                 <label htmlFor={nameInputId}>Name</label>
                 {nameCombobox}
@@ -779,9 +793,27 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         <div className="field">
           <label htmlFor={nameInputId}>Name</label>
           <div className="name-field-row">
-            {matchedFood?.imagePath && (
-              <FoodThumbnail food={matchedFood} className="name-field-thumb" enlargeable />
-            )}
+            {matchedFood &&
+              (matchedFood.imagePath ? (
+                <FoodThumbnail
+                  food={matchedFood}
+                  className="name-field-thumb"
+                  enlargeable
+                  renderActions={showLibraryAnchorEditor ? photoActions : undefined}
+                />
+              ) : (
+                showLibraryAnchorEditor && (
+                  <button
+                    type="button"
+                    className="name-field-photo-add"
+                    aria-label="Add photo"
+                    title="Add photo"
+                    onClick={() => setCapturingPhoto(true)}
+                  >
+                    📷
+                  </button>
+                )
+              ))}
             <div className="name-field-body">
               {nameCombobox}
               {errors.name && <span className="field-error">{errors.name}</span>}
@@ -1059,9 +1091,12 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
         <PhotoCapture
           onCapture={(dataUrl) => {
             setCapturingPhoto(false);
-            // Held, not uploaded: there is no captured food to attach it to
-            // until this entry is saved.
-            setPendingPhoto(dataUrl);
+            // For a new food the photo is held, not uploaded: there is no
+            // captured food to attach it to until this entry is saved. A
+            // matched food already exists, so its photo persists right away,
+            // independent of whether this entry is saved.
+            if (showAnchorEditor) setPendingPhoto(dataUrl);
+            else if (matchedFood) void setFoodImage(matchedFood.id, dataUrl);
           }}
           onCancel={() => setCapturingPhoto(false)}
         />

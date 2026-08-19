@@ -1001,12 +1001,21 @@ a:hover {
 }
 
 .sheet-handle {
+  position: relative;
   width: 36px;
   height: 4px;
   border-radius: var(--r-pill);
   background: var(--handle);
   margin: 2px auto 2px;
   flex-shrink: 0;
+  touch-action: none;
+}
+
+/* Enlarges the drag target well past the visible pill without changing its look. */
+.sheet-handle::before {
+  content: '';
+  position: absolute;
+  inset: -16px -40px;
 }
 
 .entry-form h2 {
@@ -1359,6 +1368,26 @@ a:hover {
   object-fit: cover;
   border-radius: var(--r-card-s);
   flex-shrink: 0;
+}
+
+/* Stands in for the thumbnail when an editable library food has no photo yet. */
+.name-field-photo-add {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--c-text-dim);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-card-s);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.name-field-photo-add:hover {
+  border-color: var(--brand);
 }
 
 .name-field-recipe-toggle {
@@ -2591,4 +2620,22 @@ input[type='search']::-webkit-search-cancel-button {
 .clearable-textarea .input-clear {
   top: 6px;
   transform: none;
+}
+
+/* Transient message, clearing the tab bar and the log screen's FAB above it. */
+.toast {
+  position: fixed;
+  bottom: 130px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--surface);
+  font: 500 13px/1.4 var(--font);
+  text-align: center;
+  box-shadow: var(--shadow-card);
+  pointer-events: none;
 }

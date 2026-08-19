@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { buildRequestFoods, identifyFood, type IdentifiedAmount } from '../api/identifyFood';
+import { useBackHandler } from '../state/BackNavigation';
 import type { LibraryFood } from '../types';
 import { PhotoCapture } from './PhotoCapture';
 import { PhotoConfirm } from './PhotoConfirm';
@@ -45,6 +46,14 @@ export function IdentifyOverlay({ foods, onMatch, onEstimateFallback, onCancel }
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // The capture and confirm steps are their own layers and register their own
+  // handlers, so this one stands down for them rather than racing to be the
+  // topmost when both mount in the same commit.
+  useBackHandler(
+    !(phase.kind === 'capturing' || (phase.kind === 'confirming' && !!image)),
+    onCancel,
+  );
 
   async function identify(img: string) {
     const requestFoods = buildRequestFoods(foods);

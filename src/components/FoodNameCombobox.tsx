@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useBackHandler } from '../state/BackNavigation';
 import type { LibraryFood, SavedMeal } from '../types';
 
 export interface ComboboxGroup {
@@ -53,6 +54,12 @@ export function FoodNameCombobox({
   autoFocus = true,
 }: FoodNameComboboxProps) {
   const [open, setOpen] = useState(false);
+  /**
+   * Whether this list was opened deliberately (typing, arrow key, tapping the
+   * field) rather than by the field merely taking focus — which the entry form
+   * does for you on open. Only a list the user asked for gets to answer back.
+   */
+  const [userOpened, setUserOpened] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,8 +75,21 @@ export function FoodNameCombobox({
 
   function close() {
     setOpen(false);
+    setUserOpened(false);
     setActiveIndex(-1);
   }
+
+  /** Opens the list as a deliberate act, which makes it answer back. */
+  function openList() {
+    setOpen(true);
+    setUserOpened(true);
+  }
+
+  // A list the user opened is the topmost layer, so back dismisses it before
+  // the form it sits in. One that only appeared because the field took focus
+  // isn't something they asked for, so it doesn't get to eat a back press —
+  // otherwise leaving a freshly opened entry form would cost two.
+  useBackHandler(expanded && userOpened, close);
 
   function select(option: Option) {
     if (option.kind === 'food') onSelectFood(option.food);
@@ -82,7 +102,7 @@ export function FoodNameCombobox({
     if (!expanded) {
       if (e.key === 'ArrowDown' && options.length > 0) {
         e.preventDefault();
-        setOpen(true);
+        openList();
         setActiveIndex(0);
       }
       return;
@@ -183,7 +203,7 @@ export function FoodNameCombobox({
         autoComplete="off"
         onChange={(e) => {
           onChange(e.target.value);
-          setOpen(true);
+          openList();
           setActiveIndex(-1);
         }}
         onFocus={() => setOpen(true)}
@@ -200,7 +220,7 @@ export function FoodNameCombobox({
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             onChange('');
-            setOpen(true);
+            openList();
             setActiveIndex(-1);
             inputRef.current?.focus();
           }}
