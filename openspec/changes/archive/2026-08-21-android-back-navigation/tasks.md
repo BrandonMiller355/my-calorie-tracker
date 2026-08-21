@@ -47,6 +47,6 @@
 
 ## 7. Manual verification on device
 
-- [ ] 7.1 Install/refresh the PWA on the user's Android phone and confirm back closes layers rather than the app, at each level of the chain
-- [ ] 7.2 Confirm the two-press exit actually closes the PWA at the history boundary — this cannot be covered by jsdom tests
-- [ ] 7.3 Confirm no flash or state loss when pressing back with a layer open on a non-Log tab; if it appears, fall back to the counted `history.go(-n)` approach recorded in design D4
+- [x] 7.1 Install/refresh the PWA on the user's Android phone and confirm back closes layers rather than the app, at each level of the chain
+- [x] 7.2 Confirm the two-press exit actually closes the PWA at the history boundary — this cannot be covered by jsdom tests
+- [x] 7.3 Confirm no flash or state loss when pressing back with a layer open on a non-Log tab; if it appears, fall back to the counted `history.go(-n)` approach recorded in design D4
