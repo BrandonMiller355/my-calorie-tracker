@@ -2,9 +2,7 @@
 
 ## Purpose
 TBD - created by syncing change add-calorie-tracker. Update Purpose after review.
-
 ## Requirements
-
 ### Requirement: Search external food database
 The system SHALL provide a search screen where the user enters a text query and receives matching foods from a public food database API (Open Food Facts).
 
@@ -21,7 +19,7 @@ The system SHALL provide a search screen where the user enters a text query and 
 - **THEN** the system shows a non-blocking error message and offers manual entry as a fallback
 
 ### Requirement: Select a search result
-The system SHALL let the user select a result and hand its name, nutrition data, and serving anchor to the food-logging flow, pre-filled and editable before saving. When the search screen was opened from within the add-entry form, selecting a result (or navigating back) SHALL return the user to that form with its in-progress context — notably the selected meal — restored.
+The system SHALL let the user select a result and hand its name, nutrition data, and serving anchor to the food-logging flow, pre-filled and editable before saving. When the search screen was opened from within the add-entry form, selecting a result — or taking one of the search screen's own return paths, such as its manual-entry fallback — SHALL return the user to that form with its in-progress context — notably the selected meal — restored. The platform back signal is not one of those paths: per the app-navigation capability it returns to the Log tab without reopening the form.
 
 #### Scenario: Select result to log
 - **WHEN** the user selects a search result
@@ -30,6 +28,14 @@ The system SHALL let the user select a result and hand its name, nutrition data,
 #### Scenario: Return to an in-progress form
 - **WHEN** the user opened search from the add-entry form's "search online" action with meal "lunch" selected, then selects a result
 - **THEN** the add-entry form reopens pre-filled with the result and the meal still set to "lunch"
+
+#### Scenario: Manual-entry fallback restores the form
+- **WHEN** the user opened search from the add-entry form and takes the search screen's manual-entry fallback
+- **THEN** the add-entry form reopens with its in-progress context, including the selected meal
+
+#### Scenario: Back leaves search without reopening the form
+- **WHEN** the user opened search from the add-entry form and presses back with no layer open
+- **THEN** the Log tab is shown and the entry form is not reopened
 
 #### Scenario: Standalone search unchanged
 - **WHEN** the user opens the search screen directly (not from the add-entry form) and selects a result
@@ -97,3 +103,4 @@ The system SHALL look up a scanned barcode against the Open Food Facts product-b
 #### Scenario: Lookup request fails
 - **WHEN** the barcode lookup request fails after retries
 - **THEN** the system shows a non-blocking error message and offers manual entry as a fallback
+
