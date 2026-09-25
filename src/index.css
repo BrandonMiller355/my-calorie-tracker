@@ -1437,6 +1437,11 @@ a:hover {
   gap: 6px;
 }
 
+/* A field of its own under the definition row, so it gets a field's spacing */
+.serving-def-default {
+  margin-top: 6px;
+}
+
 .entry-nutrition-summary {
   background: var(--surface-tint);
   border-radius: var(--r-card-s);

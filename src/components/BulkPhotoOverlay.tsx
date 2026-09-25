@@ -3,7 +3,7 @@ import { buildRequestFoods, identifyFood, type IdentifiedAmount, type IdentifyRe
 import { buildChainNote, type ChainItem } from '../lib/bulkPhotoChain';
 import { loadImageFile } from '../lib/photo';
 import { round1 } from '../lib/totals';
-import { availableUnits, deriveQuantity, unitLabel } from '../lib/units';
+import { availableUnits, defaultPortion, deriveQuantity, unitLabel } from '../lib/units';
 import { useAppState } from '../state/AppState';
 import { useBackHandler } from '../state/BackNavigation';
 import { MEALS, MEAL_LABELS, type LibraryFood, type Meal } from '../types';
@@ -60,8 +60,8 @@ function parseAmount(text: string): number | null {
 
 /**
  * Amount/unit prefill per the single-photo rules: the returned grams when the
- * food's anchor offers grams as a logging unit, otherwise 1 of its serving
- * label with the grams ignored.
+ * food's anchor offers grams as a logging unit, otherwise the food's default
+ * portion with the grams ignored.
  */
 function prefillFields(
   food: LibraryFood,
@@ -75,7 +75,8 @@ function prefillFields(
       estimatedWeight: amount.source === 'estimate',
     };
   }
-  return { amountText: '1', unit: food.servingLabel, estimatedWeight: false };
+  const { amount: start, unit } = defaultPortion(food);
+  return { amountText: String(start), unit, estimatedWeight: false };
 }
 
 /**

@@ -651,6 +651,130 @@ describe('FoodsScreen Meals tab', () => {
   });
 });
 
+// 1 banana = 118 g: 105 kcal, and its macros add up (~112), so saves never prompt.
+const BANANA: LibraryFood = {
+  id: 'banana',
+  name: 'Banana',
+  servingLabel: 'banana',
+  servingSize: { amount: 118, unit: 'g' },
+  calories: 105,
+  carbs: 27,
+  protein: 1.3,
+  fat: 0.4,
+  source: 'manual',
+};
+
+const defaultUnitSelect = () => screen.getByLabelText('Default log unit') as HTMLSelectElement;
+const optionLabels = (select: HTMLSelectElement) =>
+  Array.from(select.options).map((o) => o.textContent);
+
+describe('FoodsScreen default log unit', () => {
+  it('creates a food that is weighed by default', async () => {
+    const repository = renderFoods([]);
+    fireEvent.click(await screen.findByText('+ Add food item'));
+
+    setName('Banana');
+    fireEvent.change(screen.getByLabelText('Serving name'), { target: { value: 'banana' } });
+    fireEvent.change(screen.getByLabelText('Equals'), { target: { value: '118' } });
+    fireEvent.change(screen.getByLabelText('Serving unit'), { target: { value: 'g' } });
+    // Counting stays the default until a unit is picked
+    expect(defaultUnitSelect()).toHaveValue('');
+    fireEvent.change(defaultUnitSelect(), { target: { value: 'g' } });
+    expect(screen.getByText('Logging starts at 118 g, ready to type over.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Calories (kcal)'), { target: { value: '105' } });
+    fireEvent.change(screen.getByLabelText('Carbs (g)'), { target: { value: '27' } });
+    fireEvent.click(screen.getByText('Add to library'));
+
+    await waitFor(() => expect(repository.added).toHaveLength(1));
+    expect(repository.added[0]).toMatchObject({
+      name: 'Banana',
+      servingLabel: 'banana',
+      servingSize: { amount: 118, unit: 'g' },
+      defaultUnit: 'g',
+    });
+  });
+
+  it('offers only the count label until the equivalence is filled in', async () => {
+    renderFoods([PBJ]);
+    await openEditForm('PB&J');
+
+    expect(defaultUnitSelect()).toBeDisabled();
+    expect(optionLabels(defaultUnitSelect())).toEqual(['serving']);
+    expect(screen.getByText(/Fill in “Equals” to log this food by weight or volume/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Equals'), { target: { value: '250' } });
+    fireEvent.change(screen.getByLabelText('Serving unit'), { target: { value: 'g' } });
+
+    expect(defaultUnitSelect()).toBeEnabled();
+    expect(optionLabels(defaultUnitSelect())).toEqual(['serving', 'g', 'oz', 'lb', 'kg']);
+    expect(screen.queryByText(/Fill in “Equals”/)).not.toBeInTheDocument();
+  });
+
+  it('switches an existing food to weighing, and back to counting', async () => {
+    const repository = renderFoods([BANANA]);
+    await openEditForm('Banana');
+
+    fireEvent.change(defaultUnitSelect(), { target: { value: 'oz' } });
+    expect(screen.getByText('Logging starts at 4.16 oz, ready to type over.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(repository.updated).toHaveLength(1));
+    expect(repository.updated[0]).toMatchObject({ id: 'banana', defaultUnit: 'oz' });
+
+    await openEditForm('Banana');
+    expect(defaultUnitSelect()).toHaveValue('oz');
+    fireEvent.change(defaultUnitSelect(), { target: { value: '' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(repository.updated).toHaveLength(2));
+    expect(repository.updated[1]).toHaveProperty('defaultUnit', undefined);
+  });
+
+  it('saves a default the new equivalence no longer offers as the count label', async () => {
+    const repository = renderFoods([{ ...BANANA, defaultUnit: 'g' }]);
+    await openEditForm('Banana');
+    expect(defaultUnitSelect()).toHaveValue('g');
+
+    // Redefined by volume: grams stop being offered, so the picker shows the label
+    fireEvent.change(screen.getByLabelText('Equals'), { target: { value: '240' } });
+    fireEvent.change(screen.getByLabelText('Serving unit'), { target: { value: 'ml' } });
+    expect(defaultUnitSelect()).toHaveValue('');
+    fireEvent.click(screen.getByText('Save changes'));
+
+    await waitFor(() => expect(repository.updated).toHaveLength(1));
+    expect(repository.updated[0]).toMatchObject({ servingSize: { amount: 240, unit: 'ml' } });
+    expect(repository.updated[0]).toHaveProperty('defaultUnit', undefined);
+  });
+
+  it('seeds a weighed food into a new meal at its serving weight', async () => {
+    const repository = renderFoods([PBJ, { ...BANANA, defaultUnit: 'g' }]);
+    await selectFoods('PB&J', 'Banana');
+    fireEvent.click(screen.getByText('Create meal from 2 foods'));
+
+    const builder = screen.getByRole('form', { name: 'Create meal' });
+    expect(within(builder).getByLabelText('Amount of Banana')).toHaveValue('118');
+    expect(within(builder).getByLabelText('Unit for Banana')).toHaveValue('g');
+    fireEvent.change(within(builder).getByLabelText('Name'), { target: { value: 'Snack plate' } });
+    fireEvent.click(within(builder).getByText('Save meal'));
+
+    await waitForMeal(repository);
+    expect(repository.addedMeals[0].items).toEqual([
+      { foodId: 'pbj', amount: 1, unit: 'serving' },
+      { foodId: 'banana', amount: 118, unit: 'g' },
+    ]);
+  });
+
+  it('carries the default onto a fork', async () => {
+    const repository = renderFoods([{ ...BANANA, defaultUnit: 'g' }]);
+    await openEditForm('Banana');
+
+    setName('Plantain');
+    fireEvent.click(saveAsNew()!);
+
+    await waitFor(() => expect(repository.added).toHaveLength(1));
+    expect(repository.added[0]).toMatchObject({ name: 'Plantain', defaultUnit: 'g' });
+  });
+});
+
 /** Meal saves are async; wait for the builder's addMeal to land. */
 async function waitForMeal(repository: FakeRepository) {
   await waitFor(() => expect(repository.addedMeals.length).toBeGreaterThan(0));

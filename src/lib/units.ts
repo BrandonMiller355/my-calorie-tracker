@@ -1,4 +1,4 @@
-import type { MeasureUnit, ServingAnchor, VolumeUnit, WeightUnit } from '../types';
+import type { LibraryFood, MeasureUnit, ServingAnchor, VolumeUnit, WeightUnit } from '../types';
 
 export const WEIGHT_UNITS: readonly WeightUnit[] = ['g', 'oz', 'lb', 'kg'];
 export const VOLUME_UNITS: readonly VolumeUnit[] = ['ml', 'floz', 'cup', 'tbsp', 'tsp'];
@@ -47,15 +47,52 @@ export function convertAmount(amount: number, from: MeasureUnit, to: MeasureUnit
   return (amount * TO_BASE[from]) / TO_BASE[to];
 }
 
+/** Every unit of the equivalence's dimension, or none for a count-only food. */
+export function measureUnitsFor(anchor: ServingAnchor): readonly MeasureUnit[] {
+  if (!anchor.servingSize) return [];
+  return unitDimension(anchor.servingSize.unit) === 'weight' ? WEIGHT_UNITS : VOLUME_UNITS;
+}
+
 /**
  * Units the user may log this food in: always the count label, plus every
  * unit of the equivalence's dimension when an equivalence exists.
  */
 export function availableUnits(anchor: ServingAnchor): string[] {
-  if (!anchor.servingSize) return [anchor.servingLabel];
-  const dimension = unitDimension(anchor.servingSize.unit);
-  const units = dimension === 'weight' ? WEIGHT_UNITS : VOLUME_UNITS;
-  return [anchor.servingLabel, ...units];
+  return [anchor.servingLabel, ...measureUnitsFor(anchor)];
+}
+
+/**
+ * A default logging unit as it applies under `anchor`: the unit when the
+ * anchor offers it, else undefined — the count label. A stored default goes
+ * stale when the equivalence is removed or switched to the other dimension,
+ * and then quietly falls back to counting rather than failing.
+ */
+export function resolveDefaultUnit(
+  unit: string | undefined,
+  anchor: ServingAnchor,
+): MeasureUnit | undefined {
+  return measureUnitsFor(anchor).find((u) => u === unit);
+}
+
+export interface Portion {
+  amount: number;
+  /** A unit from availableUnits of the food's anchor */
+  unit: string;
+}
+
+/**
+ * Where logging a food starts when the amount isn't known yet: 1 of its count
+ * label, or — for a food that defaults to a weight or volume unit — what one
+ * count equals, in that unit (118 g for "1 banana = 118 g"). Rounded to 2dp so
+ * a converted amount stays readable in the field.
+ */
+export function defaultPortion(
+  food: Pick<LibraryFood, 'servingLabel' | 'servingSize' | 'defaultUnit'>,
+): Portion {
+  const unit = resolveDefaultUnit(food.defaultUnit, food);
+  if (unit === undefined || !food.servingSize) return { amount: 1, unit: food.servingLabel };
+  const { amount, unit: from } = food.servingSize;
+  return { amount: Math.round(convertAmount(amount, from, unit) * 100) / 100, unit };
 }
 
 /**

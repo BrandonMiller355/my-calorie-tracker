@@ -4,11 +4,13 @@ import { checkMacroCalories, macroMismatchMessage } from '../lib/macroCheck';
 import { resolveMeal } from '../lib/meal';
 import { MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
+  liveServingAnchor,
   validateFoodForm,
   type FoodFormErrors,
   type FoodFormValues,
 } from '../lib/validation';
 import { ClearableInput, ClearableTextarea } from '../components/ClearableInput';
+import { DefaultUnitField } from '../components/DefaultUnitField';
 import { MealBuilder, type MealBuilderMode } from '../components/MealBuilder';
 import { NumberInput } from '../components/NumberInput';
 import { PhotoCapture } from '../components/PhotoCapture';
@@ -37,6 +39,7 @@ function toFormValues(food?: LibraryFood): FoodFormValues {
     servingLabel: food?.servingLabel ?? '',
     servingSizeAmount: food?.servingSize ? String(food.servingSize.amount) : '',
     servingSizeUnit: food?.servingSize?.unit ?? '',
+    defaultUnit: food?.defaultUnit ?? '',
     calories: food ? String(food.calories) : '',
     carbs: food ? String(food.carbs) : '',
     protein: food ? String(food.protein) : '',
@@ -317,6 +320,11 @@ function FoodForm({ editing, onClose }: { editing?: LibraryFood; onClose: () => 
               {errors.servingLabel ?? errors.servingSizeAmount ?? errors.servingSizeUnit}
             </span>
           )}
+          <DefaultUnitField
+            anchor={liveServingAnchor(values)}
+            value={values.defaultUnit}
+            onChange={(unit) => setField('defaultUnit', unit)}
+          />
         </div>
 
         <label>

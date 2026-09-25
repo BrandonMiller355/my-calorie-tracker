@@ -68,6 +68,14 @@ export interface LibraryFood extends ServingAnchor {
   protein: number;
   fat: number;
   source: 'manual' | 'search';
+  /**
+   * The unit logging this food starts in (per serving-units): undefined for its
+   * count label, or a weight/volume unit its equivalence offers, for a food
+   * weighed or measured every time — logging it then starts at what one count
+   * equals, in that unit. A unit the anchor no longer offers reads as the
+   * count label. Never snapshotted onto entries.
+   */
+  defaultUnit?: MeasureUnit;
   /** ISO timestamp; archived foods are hidden from suggestions and search */
   archivedAt?: string;
   /**

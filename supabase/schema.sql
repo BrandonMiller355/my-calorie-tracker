@@ -181,6 +181,19 @@ alter table foods add column image_path text;
 -- BEFORE deploying app code that reads or writes it.
 alter table foods add column skip_macro_check boolean not null default false;
 
+-- The unit logging this food starts in. null (the default) counts it in its
+-- serving_label; a weight or volume unit is for foods weighed or measured every
+-- time (a banana is never the same size twice), which then start at what one
+-- serving equals in that unit — e.g. 118 g — ready to be typed over. Only
+-- checked against the unit list, not the equivalence: a unit the equivalence no
+-- longer offers (removed, or switched to the other dimension) is read as
+-- serving_label by the app. Never snapshotted onto food_entries. Run in the
+-- dashboard BEFORE deploying app code that reads or writes it — every food
+-- insert and update writes this column.
+alter table foods add column default_unit text
+  check (default_unit is null or default_unit in
+    ('g', 'oz', 'lb', 'kg', 'ml', 'floz', 'cup', 'tbsp', 'tsp'));
+
 -- Name-field suggestions: up to 5 foods most recently logged for the meal,
 -- then up to 5 most often logged for it, deduped across the two groups and
 -- excluding archived foods. security invoker (the default), so RLS on both

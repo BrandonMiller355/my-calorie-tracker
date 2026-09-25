@@ -2,8 +2,10 @@ import type { ServingAnchor } from '../types';
 import {
   availableUnits,
   convertAmount,
+  defaultPortion,
   deriveQuantity,
   isMeasureUnit,
+  resolveDefaultUnit,
   unitDimension,
   unitLabel,
 } from './units';
@@ -56,6 +58,59 @@ describe('availableUnits', () => {
     const units = availableUnits(volumeAnchor);
     expect(units).toEqual(['serving', 'ml', 'floz', 'cup', 'tbsp', 'tsp']);
     expect(units).not.toContain('g');
+  });
+});
+
+describe('resolveDefaultUnit', () => {
+  it('keeps a unit the anchor offers', () => {
+    expect(resolveDefaultUnit('oz', canDrained)).toBe('oz');
+    expect(resolveDefaultUnit('cup', volumeAnchor)).toBe('cup');
+  });
+
+  it('reads a unit the anchor does not offer as the count label', () => {
+    // Other dimension, no equivalence at all, and the label or no choice
+    expect(resolveDefaultUnit('g', volumeAnchor)).toBeUndefined();
+    expect(resolveDefaultUnit('g', countOnly)).toBeUndefined();
+    expect(resolveDefaultUnit('can (drained)', canDrained)).toBeUndefined();
+    expect(resolveDefaultUnit('', canDrained)).toBeUndefined();
+    expect(resolveDefaultUnit(undefined, canDrained)).toBeUndefined();
+  });
+});
+
+describe('defaultPortion', () => {
+  const banana = {
+    servingLabel: 'banana',
+    servingSize: { amount: 118, unit: 'g' as const },
+  };
+
+  it('starts a weighed food at what one count weighs', () => {
+    const portion = defaultPortion({ ...banana, defaultUnit: 'g' });
+    expect(portion).toEqual({ amount: 118, unit: 'g' });
+    // exactly one serving, so the prefill never changes the nutrition
+    expect(deriveQuantity(portion.amount, portion.unit, banana)).toBe(1);
+  });
+
+  it('converts into a different unit of the dimension, rounded to 2dp', () => {
+    const packet = { servingLabel: 'serving', servingSize: { amount: 28, unit: 'g' as const } };
+    expect(defaultPortion({ ...packet, defaultUnit: 'oz' })).toEqual({ amount: 0.99, unit: 'oz' });
+    expect(defaultPortion({ ...volumeAnchor, defaultUnit: 'cup' })).toEqual({
+      amount: 1.01,
+      unit: 'cup',
+    });
+  });
+
+  it('starts a counted food at one of its label', () => {
+    expect(defaultPortion(banana)).toEqual({ amount: 1, unit: 'banana' });
+    expect(defaultPortion(countOnly)).toEqual({ amount: 1, unit: 'bowl' });
+  });
+
+  it('falls back to counting when the default has gone stale', () => {
+    // Switched from grams to a volume equivalence, or the equivalence removed
+    expect(defaultPortion({ ...volumeAnchor, defaultUnit: 'g' })).toEqual({
+      amount: 1,
+      unit: 'serving',
+    });
+    expect(defaultPortion({ ...countOnly, defaultUnit: 'g' })).toEqual({ amount: 1, unit: 'bowl' });
   });
 });
 
