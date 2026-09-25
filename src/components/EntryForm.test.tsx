@@ -192,6 +192,7 @@ class FakeRepository implements StorageRepository {
   library: LibraryFood[] = [CHICKEN, COOKIE];
   meals: SavedMeal[] = [];
   lastUsed: Record<string, string> = {};
+  suggestions: MealSuggestions = { recent: [], mostUsed: [] };
 
   async getEntriesByDate(): Promise<FoodEntry[]> {
     return [];
@@ -241,7 +242,7 @@ class FakeRepository implements StorageRepository {
   async updateMeal(): Promise<void> {}
   async archiveMeal(): Promise<void> {}
   async getMealSuggestions(): Promise<MealSuggestions> {
-    return { recent: [], mostUsed: [] };
+    return this.suggestions;
   }
   async getFoodLastUsed(): Promise<Record<string, string>> {
     return this.lastUsed;
@@ -1244,5 +1245,288 @@ describe('EntryForm photo for a captured food', () => {
     expect(repository.addFoodCalls).toHaveLength(0);
     expect(repository.imageUploads).toHaveLength(0);
     expect(repository.addEntryCalls[0]).toMatchObject({ foodId: 'food-chicken' });
+  });
+});
+
+// Weighed every time: logging starts at what one banana weighs, in grams.
+const BANANA: LibraryFood = {
+  id: 'food-banana',
+  name: 'Banana',
+  servingLabel: 'banana',
+  servingSize: { amount: 118, unit: 'g' },
+  defaultUnit: 'g',
+  calories: 105,
+  carbs: 27,
+  protein: 1.3,
+  fat: 0.4,
+  source: 'manual',
+};
+
+/** Types `query` into the name field and taps the named food in the dropdown. */
+function pickFood(query: string, name: string) {
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: query } });
+  const option = within(screen.getByRole('listbox'))
+    .getAllByRole('option')
+    .find((o) => o.textContent?.includes(name))!;
+  fireEvent.mouseDown(option);
+  fireEvent.click(option);
+}
+
+const amountField = () => screen.getByLabelText('Amount') as HTMLInputElement;
+
+/** The amount field has focus with its whole value selected, so typing replaces it. */
+function expectAmountSelected() {
+  const amount = amountField();
+  expect(document.activeElement).toBe(amount);
+  expect(amount.selectionStart).toBe(0);
+  expect(amount.selectionEnd).toBe(amount.value.length);
+}
+
+async function renderWithLibrary(library: LibraryFood[], props: { onClose?: () => void } = {}) {
+  const repository = new FakeRepository();
+  repository.library = library;
+  await renderForm({ repository, ...props });
+  return repository;
+}
+
+describe('EntryForm default portion', () => {
+  it('starts a weighed food at its serving weight, focused and selected', async () => {
+    const onClose = vi.fn();
+    const repository = await renderWithLibrary([BANANA, COOKIE], { onClose });
+
+    pickFood('ban', 'Banana');
+
+    expect(amountField()).toHaveValue('118');
+    expect(screen.getByLabelText('Unit')).toHaveValue('g');
+    expectAmountSelected();
+    // 118 g is exactly one banana
+    expect(screen.getByTestId('entry-preview')).toHaveTextContent('105 kcal');
+
+    fireEvent.change(amountField(), { target: { value: '130' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addEntryCalls[0]).toMatchObject({
+      foodId: BANANA.id,
+      amount: 130,
+      unit: 'g',
+      quantity: 130 / 118,
+    });
+  });
+
+  it('moves focus to the amount when a weighed food is picked with the keyboard', async () => {
+    await renderWithLibrary([BANANA]);
+
+    const name = screen.getByLabelText('Name');
+    fireEvent.change(name, { target: { value: 'ban' } });
+    fireEvent.keyDown(name, { key: 'ArrowDown' });
+    fireEvent.keyDown(name, { key: 'Enter' });
+
+    expect(amountField()).toHaveValue('118');
+    expectAmountSelected();
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('starts a counted food at one count, leaving focus alone', async () => {
+    await renderWithLibrary([CHICKEN, COOKIE]);
+
+    // Chicken has a gram equivalence but counts by default
+    pickFood('chick', 'Chicken breast');
+    expect(amountField()).toHaveValue('1');
+    expect(screen.getByLabelText('Unit')).toHaveValue('serving');
+    expect(document.activeElement).not.toBe(amountField());
+
+    pickFood('cook', 'Protein cookie');
+    expect(amountField()).toHaveValue('1');
+    expect(screen.getByLabelText('Unit')).toHaveValue('cookie');
+    expect(document.activeElement).not.toBe(amountField());
+  });
+
+  it('resets the portion when a different food is picked', async () => {
+    await renderWithLibrary([BANANA, COOKIE]);
+
+    pickFood('ban', 'Banana');
+    fireEvent.change(amountField(), { target: { value: '150' } });
+
+    // Previously the 150 carried over as "150 cookie"
+    pickFood('cook', 'Protein cookie');
+    expect(amountField()).toHaveValue('1');
+    expect(screen.getByLabelText('Unit')).toHaveValue('cookie');
+  });
+
+  it('takes the default from the library when picked from a suggestion row', async () => {
+    const repository = new FakeRepository();
+    repository.library = [BANANA];
+    // meal_suggestions() rows don't carry default_unit
+    repository.suggestions = { recent: [{ ...BANANA, defaultUnit: undefined }], mostUsed: [] };
+    await renderForm({ repository });
+
+    fireEvent.focus(screen.getByLabelText('Name'));
+    const option = within(screen.getByRole('listbox'))
+      .getAllByRole('option')
+      .find((o) => o.textContent?.includes('Banana'))!;
+    fireEvent.click(option);
+
+    expect(amountField()).toHaveValue('118');
+    expect(screen.getByLabelText('Unit')).toHaveValue('g');
+    expectAmountSelected();
+  });
+
+  it('keeps an edited entry’s own amount', async () => {
+    const repository = new FakeRepository();
+    repository.library = [BANANA];
+    await renderForm({
+      repository,
+      editing: {
+        ...ENTRY,
+        name: 'Banana',
+        foodId: BANANA.id,
+        amount: 130,
+        unit: 'g',
+        servingLabel: 'banana',
+        servingSize: { amount: 118, unit: 'g' },
+      },
+    });
+
+    expect(amountField()).toHaveValue('130');
+    expect(screen.getByLabelText('Unit')).toHaveValue('g');
+    expect(document.activeElement).not.toBe(amountField());
+  });
+
+  it('starts an identify match without a usable weight at the default, selected', async () => {
+    stubIdentify.food = BANANA;
+    stubIdentify.amount = undefined;
+    await renderWithLibrary([BANANA]);
+
+    openIdentify();
+    fireEvent.click(screen.getByText('stub-match'));
+
+    expect(amountField()).toHaveValue('118');
+    expect(screen.getByLabelText('Unit')).toHaveValue('g');
+    expectAmountSelected();
+  });
+
+  it('uses an identify scale reading as-is, without moving focus', async () => {
+    stubIdentify.food = BANANA;
+    stubIdentify.amount = { grams: 142, source: 'scale' };
+    await renderWithLibrary([BANANA]);
+
+    openIdentify();
+    fireEvent.click(screen.getByText('stub-match'));
+
+    expect(amountField()).toHaveValue('142');
+    expect(screen.getByLabelText('Unit')).toHaveValue('g');
+    expect(document.activeElement).not.toBe(amountField());
+  });
+
+  it('uses a text-log amount as-is, without moving focus', async () => {
+    stubTextLog.item = {
+      key: 'k1',
+      name: 'Banana',
+      anchor: { servingLabel: 'banana', servingSize: { amount: 118, unit: 'g' } },
+      calories: 105,
+      fat: 0.4,
+      carbs: 27,
+      protein: 1.3,
+      amount: 2,
+      unit: 'banana',
+      meal: 'snacks',
+      foodId: BANANA.id,
+      source: 'manual',
+    };
+    await renderWithLibrary([BANANA]);
+
+    openTextLog();
+    fireEvent.click(screen.getByText('stub-single-item'));
+    await act(async () => {});
+
+    expect(amountField()).toHaveValue('2');
+    expect(screen.getByLabelText('Unit')).toHaveValue('banana');
+    expect(document.activeElement).not.toBe(amountField());
+  });
+
+  it('drops a stale AI-estimated-weight caveat when another food is picked', async () => {
+    stubIdentify.food = CHICKEN;
+    stubIdentify.amount = { grams: 130, source: 'estimate' };
+    await renderWithLibrary([CHICKEN, BANANA]);
+
+    openIdentify();
+    fireEvent.click(screen.getByText('stub-match'));
+    expect(screen.getByText(/Weight estimated by AI/)).toBeInTheDocument();
+
+    pickFood('ban', 'Banana');
+    expect(screen.queryByText(/Weight estimated by AI/)).not.toBeInTheDocument();
+  });
+});
+
+describe('EntryForm default log unit on the library food', () => {
+  const defaultUnitSelect = () => screen.getByLabelText('Default log unit') as HTMLSelectElement;
+
+  it('sets a linked food’s default under "Edit nutrition"', async () => {
+    const onClose = vi.fn();
+    const repository = await renderWithLibrary([CHICKEN], { onClose });
+
+    pickFood('chick', 'Chicken breast');
+    fireEvent.click(screen.getByText('Edit nutrition'));
+    expect(defaultUnitSelect()).toHaveValue('');
+    fireEvent.change(defaultUnitSelect(), { target: { value: 'g' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // This entry is logged as entered; only the library food's default changes
+    expect(repository.addEntryCalls[0]).toMatchObject({ amount: 1, unit: 'serving' });
+    expect(repository.updateFoodCalls).toHaveLength(1);
+    expect(repository.updateFoodCalls[0]).toMatchObject({ id: CHICKEN.id, defaultUnit: 'g' });
+  });
+
+  it('keeps a linked food’s default when other nutrition is edited', async () => {
+    const onClose = vi.fn();
+    const repository = await renderWithLibrary([BANANA], { onClose });
+
+    pickFood('ban', 'Banana');
+    fireEvent.click(screen.getByText('Edit nutrition'));
+    expect(defaultUnitSelect()).toHaveValue('g');
+    fireEvent.change(screen.getByLabelText(/Calories/), { target: { value: '110' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.updateFoodCalls[0]).toMatchObject({ calories: 110, defaultUnit: 'g' });
+  });
+
+  it('offers no default picker while defining a new food', async () => {
+    await renderForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Mango' } });
+    expect(screen.getByText('Serving name')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Default log unit')).not.toBeInTheDocument();
+  });
+
+  it('captures a new food logged in grams as weighed by default', async () => {
+    const onClose = vi.fn();
+    const repository = await renderWithLibrary([], { onClose });
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Mango' } });
+    fireEvent.change(screen.getByLabelText('Equals'), { target: { value: '200' } });
+    fireEvent.change(screen.getByLabelText('Serving unit'), { target: { value: 'g' } });
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'g' } });
+    fireEvent.change(amountField(), { target: { value: '150' } });
+    fireEvent.change(screen.getByLabelText(/Calories \(kcal\)/), { target: { value: '120' } });
+    fireEvent.change(screen.getByLabelText(/Carbs \(g\)/), { target: { value: '30' } });
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addFoodCalls[0]).toMatchObject({ name: 'Mango', defaultUnit: 'g' });
+    expect(repository.addEntryCalls[0]).toMatchObject({ amount: 150, unit: 'g', quantity: 0.75 });
+  });
+
+  it('captures a new food logged by count as counted by default', async () => {
+    const onClose = vi.fn();
+    const repository = await renderWithLibrary([], { onClose });
+
+    fillNewFood('Cheesy mash');
+    fireEvent.click(screen.getByText('Add to log'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(repository.addFoodCalls[0]).toMatchObject({ name: 'Cheesy mash' });
+    expect((repository.addFoodCalls[0] as LibraryFood).defaultUnit).toBeUndefined();
   });
 });

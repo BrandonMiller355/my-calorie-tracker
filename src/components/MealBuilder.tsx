@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { findMealByName, matchFoods, normalizeFoodName } from '../lib/foodMatch';
-import { availableUnits, deriveQuantity, unitLabel } from '../lib/units';
+import { availableUnits, defaultPortion, deriveQuantity, unitLabel } from '../lib/units';
 import {
   validateMealForm,
   type MealComponentFormValue,
@@ -18,9 +18,10 @@ export type MealBuilderMode =
   | { kind: 'create'; seed: LibraryFood[] }
   | { kind: 'edit'; meal: SavedMeal };
 
-/** A seed food (or an edited meal's component) as an editable builder row. */
+/** A food newly added to the builder, as a row at the portion it logs by default. */
 function seedComponent(food: LibraryFood): MealComponentFormValue {
-  return { food, amount: '1', unit: food.servingLabel };
+  const { amount, unit } = defaultPortion(food);
+  return { food, amount: String(amount), unit };
 }
 
 /** Reconstitute an edited meal's rows from the current library; components whose

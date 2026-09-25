@@ -4,6 +4,7 @@
 Log a meal that was assembled incrementally on a tared kitchen scale (beans, then cheese sauce, then salsa — one photo per addition) in a single pass: select the photos from the device gallery, identify each photo's newly added food against the library via sequential chained identify-food requests, and bulk-log every item from one editable review list. Builds on the ai-food-identify capability without changing its server contract.
 
 ## Requirements
+
 ### Requirement: Bulk-photos entry point in the Log Food dialog
 The Log Food dialog (entry form in add mode) SHALL offer a "bulk photos" action in its header alongside the identify-from-photo and log-from-text actions. The action MUST NOT be rendered when editing an existing entry, and all other entry-form behavior SHALL be unchanged when the action is unused.
 
@@ -50,15 +51,19 @@ The system SHALL identify the photos one at a time, in order, through the existi
 - **THEN** photo 3's note describes the dish as containing photo 1's food plus an unidentified addition
 
 ### Requirement: Single review list of identified items
-When the batch completes, the system SHALL present all results as one review list, in identification order, with one row per photo showing: the photo's thumbnail, the matched food's name, an editable amount and unit, and an editable meal selection defaulting to the dialog's selected meal. Amount and unit SHALL be prefilled by the single-photo rules: the returned gram amount with unit grams when the food's serving anchor offers grams as a logging unit, otherwise 1 of the food's serving label with any gram amount ignored. An amount whose source is an AI visual estimate SHALL be visibly labeled as such. Each row SHALL offer a remove action. Nothing SHALL be logged before the explicit bulk-log action.
+When the batch completes, the system SHALL present all results as one review list, in identification order, with one row per photo showing: the photo's thumbnail, the matched food's name, an editable amount and unit, and an editable meal selection defaulting to the dialog's selected meal. Amount and unit SHALL be prefilled by the single-photo rules: the returned gram amount with unit grams when the food's serving anchor offers grams as a logging unit, otherwise the food's default portion (per the serving-units capability) with any gram amount ignored. An amount whose source is an AI visual estimate SHALL be visibly labeled as such. Each row SHALL offer a remove action. Nothing SHALL be logged before the explicit bulk-log action.
 
 #### Scenario: Rows prefilled from scale reads
 - **WHEN** three photos each matched a library food with a scale-read weight and every food's anchor offers grams
 - **THEN** the review list shows three rows in photo order, each with its thumbnail, the food's name, the read weight in grams, and the dialog's meal preselected
 
 #### Scenario: Matched food without weight equivalence
-- **WHEN** a row's food has no weight equivalence in its serving anchor and the response included a gram amount
+- **WHEN** a row's food has no equivalence in its serving anchor and the response included a gram amount
 - **THEN** that row prefills 1 of the food's serving label and the gram amount is ignored
+
+#### Scenario: Weighed food without a usable weight
+- **WHEN** a row's food is anchored at "1 banana = 118 g" with default logging unit g, and the response included no gram amount
+- **THEN** that row prefills 118 g
 
 #### Scenario: User removes a row
 - **WHEN** the user activates a row's remove action
@@ -133,4 +138,3 @@ When a reviewed row is logged against its matched library food and that food has
 #### Scenario: Unrecognized and removed rows attach nothing
 - **WHEN** a batch contains an unrecognized row and a row the user removed before logging
 - **THEN** neither contributes an image to any food
-

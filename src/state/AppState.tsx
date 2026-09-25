@@ -13,6 +13,7 @@ import { startOfWeek, todayKey } from '../lib/date';
 import { useRefreshOnReturn } from '../lib/useRefreshOnReturn';
 import { findFoodByName } from '../lib/foodMatch';
 import { resolveMeal } from '../lib/meal';
+import { resolveDefaultUnit } from '../lib/units';
 import { computeWeeklyDeficit } from '../lib/weeklyDeficit';
 import { dataUrlToBlob } from '../lib/photo';
 import { invalidateFoodImage } from '../lib/foodImageCache';
@@ -487,6 +488,10 @@ export function AppProvider({
             recipe: recipe?.trim() || undefined,
             servingLabel: entryInput.servingLabel,
             servingSize: entryInput.servingSize,
+            // A food first logged by weight or volume is one that gets
+            // measured, so its later logs start in that unit; one first
+            // logged by count keeps counting.
+            defaultUnit: resolveDefaultUnit(entryInput.unit, entryInput),
             calories: entryInput.calories,
             carbs: entryInput.carbs,
             protein: entryInput.protein,

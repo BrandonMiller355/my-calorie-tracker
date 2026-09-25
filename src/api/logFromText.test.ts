@@ -215,6 +215,48 @@ describe('resolveTextLogItems', () => {
     expect(item).toMatchObject({ amount: 1, unit: 'slice' });
   });
 
+  describe('for a food that defaults to a measure unit', () => {
+    const WEIGHED: LibraryFood[] = [
+      libraryFood({
+        id: 'banana',
+        name: 'Banana',
+        servingLabel: 'banana',
+        servingSize: { amount: 118, unit: 'g' },
+        defaultUnit: 'g',
+      }),
+      libraryFood({
+        id: 'milk',
+        name: 'Milk',
+        servingLabel: 'glass',
+        servingSize: { amount: 240, unit: 'ml' },
+        defaultUnit: 'ml',
+      }),
+    ];
+
+    it('starts at the default portion when no amount was stated', () => {
+      const [item] = resolveTextLogItems([{ kind: 'match', foodId: 'banana' }], WEIGHED, 'snacks');
+      expect(item).toMatchObject({ amount: 118, unit: 'g' });
+    });
+
+    it('still uses a stated count as said', () => {
+      const [item] = resolveTextLogItems(
+        [{ kind: 'match', foodId: 'banana', servings: 2 }],
+        WEIGHED,
+        'snacks',
+      );
+      expect(item).toMatchObject({ amount: 2, unit: 'banana' });
+    });
+
+    it('starts at the default portion when stated grams cannot convert', () => {
+      const [item] = resolveTextLogItems(
+        [{ kind: 'match', foodId: 'milk', grams: 200 }],
+        WEIGHED,
+        'snacks',
+      );
+      expect(item).toMatchObject({ amount: 240, unit: 'ml' });
+    });
+  });
+
   it('prefers a stated meal over the fallback', () => {
     const [item] = resolveTextLogItems(
       [{ kind: 'match', foodId: 'food-1', meal: 'breakfast' }],

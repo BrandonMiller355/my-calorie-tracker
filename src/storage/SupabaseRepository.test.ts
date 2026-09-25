@@ -155,6 +155,7 @@ const foodRow = {
   source: 'manual',
   image_path: null,
   skip_macro_check: false,
+  default_unit: null,
 };
 
 const savedMeal: SavedMeal = {
@@ -372,6 +373,30 @@ describe('SupabaseRepository', () => {
       method: 'insert',
       args: [{ ...flaggedRow, description: null }],
     });
+  });
+
+  it('round-trips the default logging unit, and clears it back to null', async () => {
+    const weighed = { ...food, servingSize: { amount: 118, unit: 'g' as const }, defaultUnit: 'g' as const };
+    const weighedRow = { ...foodRow, serving_size_amount: 118, serving_size_unit: 'g', default_unit: 'g' };
+
+    const { client: readClient } = fakeClient({ data: [weighedRow] });
+    expect(await new SupabaseRepository(readClient).getFoods()).toEqual([weighed]);
+
+    const { client: writeClient, calls } = fakeClient();
+    await new SupabaseRepository(writeClient).updateFood(weighed);
+    expect((calls[1].args[0] as { default_unit: string }).default_unit).toBe('g');
+
+    // Back to counting: the column is written as null, not left as it was
+    const { client: clearClient, calls: clearCalls } = fakeClient();
+    await new SupabaseRepository(clearClient).updateFood({ ...weighed, defaultUnit: undefined });
+    expect(clearCalls[1].args[0]).toHaveProperty('default_unit', null);
+  });
+
+  it('reads a suggestion row without the default_unit column as counting', async () => {
+    const { default_unit: _u, ...suggestionColumns } = foodRow;
+    const { client } = fakeClient({ data: [{ ...suggestionColumns, suggestion_group: 'recent' }] });
+    const { recent } = await new SupabaseRepository(client).getMealSuggestions('lunch');
+    expect(recent[0].defaultUnit).toBeUndefined();
   });
 
   it('archiveFood stamps archived_at instead of deleting', async () => {

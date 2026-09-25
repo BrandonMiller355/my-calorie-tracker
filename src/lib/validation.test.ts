@@ -1,9 +1,12 @@
 import type { LibraryFood, ServingAnchor } from '../types';
 import {
+  liveServingAnchor,
   validateEntryForm,
+  validateFoodForm,
   validateMealForm,
   validateServingAnchor,
   type EntryFormValues,
+  type FoodFormValues,
   type MealComponentFormValue,
   type ServingAnchorFormValues,
 } from './validation';
@@ -103,7 +106,7 @@ describe('validateEntryForm', () => {
 });
 
 function anchorValues(overrides: Partial<ServingAnchorFormValues> = {}): ServingAnchorFormValues {
-  return { servingLabel: '', servingSizeAmount: '', servingSizeUnit: '', ...overrides };
+  return { servingLabel: '', servingSizeAmount: '', servingSizeUnit: '', defaultUnit: '', ...overrides };
 }
 
 describe('validateServingAnchor', () => {
@@ -152,6 +155,61 @@ describe('validateServingAnchor', () => {
     );
     expect(zero.ok).toBe(false);
     if (!zero.ok) expect(zero.errors.servingSizeAmount).toBeTruthy();
+  });
+});
+
+describe('liveServingAnchor', () => {
+  it('follows the fields once they parse, and counts until they do', () => {
+    expect(
+      liveServingAnchor(
+        anchorValues({ servingLabel: 'banana', servingSizeAmount: '118', servingSizeUnit: 'g' }),
+      ),
+    ).toEqual({ servingLabel: 'banana', servingSize: { amount: 118, unit: 'g' } });
+    // Mid-edit: the amount has been cleared to be retyped
+    expect(
+      liveServingAnchor(anchorValues({ servingLabel: 'banana', servingSizeUnit: 'g' })),
+    ).toEqual({ servingLabel: 'banana' });
+    expect(liveServingAnchor(anchorValues())).toEqual({ servingLabel: 'serving' });
+  });
+});
+
+describe('validateFoodForm default logging unit', () => {
+  function foodValues(overrides: Partial<FoodFormValues> = {}): FoodFormValues {
+    return {
+      name: 'Banana',
+      description: '',
+      recipe: '',
+      calories: '105',
+      carbs: '27',
+      protein: '1.3',
+      fat: '0.4',
+      ...anchorValues({ servingLabel: 'banana', servingSizeAmount: '118', servingSizeUnit: 'g' }),
+      ...overrides,
+    };
+  }
+
+  it('keeps a unit the equivalence offers', () => {
+    const result = validateFoodForm(foodValues({ defaultUnit: 'oz' }));
+    expect(result.ok && result.parsed.defaultUnit).toBe('oz');
+  });
+
+  it('parses the count label as no default, always as an own key', () => {
+    const result = validateFoodForm(foodValues());
+    expect(result.ok).toBe(true);
+    // Present as a key so spreading the result over a food clears its old default
+    if (result.ok) expect(result.parsed).toHaveProperty('defaultUnit', undefined);
+  });
+
+  it('saves a unit the equivalence no longer offers as the count label', () => {
+    const volume = validateFoodForm(
+      foodValues({ servingSizeAmount: '240', servingSizeUnit: 'ml', defaultUnit: 'g' }),
+    );
+    expect(volume.ok && volume.parsed.defaultUnit).toBeUndefined();
+
+    const countOnly = validateFoodForm(
+      foodValues({ servingSizeAmount: '', servingSizeUnit: '', defaultUnit: 'g' }),
+    );
+    expect(countOnly.ok && countOnly.parsed.defaultUnit).toBeUndefined();
   });
 });
 

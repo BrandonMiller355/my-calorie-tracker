@@ -348,6 +348,23 @@ describe('BulkPhotoOverlay review', () => {
     expect(screen.getByLabelText('Unit for photo 1')).toHaveValue('cookie');
   });
 
+  it('starts a row with no usable weight at the food’s default portion', async () => {
+    // Weighed every time, so it starts at one serving's weight instead of "1 serving"
+    const weighedBeans: LibraryFood = { ...BEANS, defaultUnit: 'g' };
+    identifyFoodMock
+      .mockResolvedValueOnce(match(weighedBeans))
+      .mockResolvedValueOnce(match(COOKIE));
+    await renderOverlay([weighedBeans, COOKIE]);
+    await selectFiles([photoFile('beans.jpg', 1000), photoFile('cookie.jpg', 2000)]);
+
+    expect(screen.getByLabelText('Amount for photo 1')).toHaveValue('100');
+    expect(screen.getByLabelText('Unit for photo 1')).toHaveValue('g');
+    expect(screen.queryByText(/Weight estimated by AI/)).not.toBeInTheDocument();
+    // A counted food still starts at one of its label
+    expect(screen.getByLabelText('Amount for photo 2')).toHaveValue('1');
+    expect(screen.getByLabelText('Unit for photo 2')).toHaveValue('cookie');
+  });
+
   it('labels an AI-estimated weight', async () => {
     identifyFoodMock.mockResolvedValueOnce(match(BEANS, 90, 'estimate'));
     await renderOverlay();

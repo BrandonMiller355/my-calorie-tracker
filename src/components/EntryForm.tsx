@@ -1,11 +1,22 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IdentifiedAmount } from '../api/identifyFood';
 import { checkMacroCalories, macroMismatchMessage } from '../lib/macroCheck';
 import { findFoodByName, matchFoods, matchMeals } from '../lib/foodMatch';
 import { currentMeal } from '../lib/mealTime';
-import { availableUnits, deriveQuantity, MEASURE_UNITS, UNIT_LABELS, unitLabel } from '../lib/units';
 import {
+  availableUnits,
+  defaultPortion,
+  deriveQuantity,
+  isMeasureUnit,
+  MEASURE_UNITS,
+  resolveDefaultUnit,
+  UNIT_LABELS,
+  unitLabel,
+  type Portion,
+} from '../lib/units';
+import {
+  liveServingAnchor,
   validateEntryForm,
   validateServingAnchor,
   type EntryFormErrors,
@@ -25,6 +36,7 @@ import {
   type LibraryFood,
   type Meal,
   type MealSuggestions,
+  type MeasureUnit,
   type SavedMeal,
   type ServingAnchor,
 } from '../types';
@@ -32,6 +44,7 @@ import type { ResolvedTextLogItem } from '../api/logFromText';
 import { AiAnalyzeOverlay } from './AiAnalyzeOverlay';
 import { BulkPhotoOverlay } from './BulkPhotoOverlay';
 import { ClearableInput, ClearableTextarea } from './ClearableInput';
+import { DefaultUnitField } from './DefaultUnitField';
 import { FoodNameCombobox, type ComboboxAction, type ComboboxGroup } from './FoodNameCombobox';
 import { FoodThumbnail, PhotoThumbnail } from './FoodThumbnail';
 import { IdentifyOverlay } from './IdentifyOverlay';
@@ -54,11 +67,14 @@ function numToField(n: number | undefined): string {
   return n === undefined ? '' : String(n);
 }
 
-function anchorToFields(anchor: ServingAnchor | undefined): ServingAnchorFormValues {
+function anchorToFields(
+  anchor: (ServingAnchor & { defaultUnit?: MeasureUnit }) | undefined,
+): ServingAnchorFormValues {
   return {
     servingLabel: anchor?.servingLabel ?? '',
     servingSizeAmount: numToField(anchor?.servingSize?.amount),
     servingSizeUnit: anchor?.servingSize?.unit ?? '',
+    defaultUnit: anchor?.defaultUnit ?? '',
   };
 }
 
@@ -79,11 +95,17 @@ function ServingAnchorFields({
   errors,
   onChange,
   note,
+  withDefaultUnit = false,
 }: {
   values: ServingAnchorFormValues;
   errors: ServingAnchorFormErrors;
   onChange: (key: keyof ServingAnchorFormValues, value: string) => void;
   note?: string;
+  /**
+   * Offer the default log unit too — only when editing an existing library
+   * food; a food captured by this log takes the unit it's logged in instead.
+   */
+  withDefaultUnit?: boolean;
 }) {
   return (
     <div className="serving-def">
@@ -125,6 +147,13 @@ function ServingAnchorFields({
           {errors.servingLabel ?? errors.servingSizeAmount ?? errors.servingSizeUnit}
         </span>
       )}
+      {withDefaultUnit && (
+        <DefaultUnitField
+          anchor={liveServingAnchor(values)}
+          value={values.defaultUnit}
+          onChange={(unit) => onChange('defaultUnit', unit)}
+        />
+      )}
       {note && <p className="form-note">{note}</p>}
     </div>
   );
@@ -149,6 +178,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const navigate = useNavigate();
   const nameInputId = useId();
   const amountInputId = useId();
+  const amountRef = useRef<HTMLInputElement>(null);
 
   const [meal, setMeal] = useState<Meal>(editing?.meal ?? defaultMeal ?? currentMeal());
   /** Calories-only quick entry: no name/amount/serving, never touches the library */
@@ -216,6 +246,14 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   const [aiEstimatedWeight, setAiEstimatedWeight] = useState(false);
   /** Filled by an accepted AI estimate; classifies the entry like a search prefill */
   const [aiPrefilled, setAiPrefilled] = useState(false);
+  /** Bumped when a pick prefills a default weight or volume, to be typed over */
+  const [amountSelectRequest, setAmountSelectRequest] = useState(0);
+
+  // The pick that asked for this already moved focus to the amount (see
+  // selectFood); selecting has to wait until the prefilled value is in it.
+  useLayoutEffect(() => {
+    if (amountSelectRequest > 0) amountRef.current?.select();
+  }, [amountSelectRequest]);
 
   useEffect(() => {
     let cancelled = false;
@@ -267,10 +305,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
 
   // Best-effort live parse so the unit picker follows the in-form definition;
   // invalid equivalence fields degrade to count-only until submit validation.
-  const liveInlineParse = validateServingAnchor(anchorFields);
-  const inlineAnchor: ServingAnchor = liveInlineParse.ok
-    ? liveInlineParse.parsed
-    : { servingLabel: anchorFields.servingLabel.trim() || DEFAULT_SERVING_LABEL };
+  const inlineAnchor = liveServingAnchor(anchorFields);
 
   const anchorFieldsActive = showAnchorEditor || showLibraryAnchorEditor;
   const activeAnchor: ServingAnchor = anchorFieldsActive
@@ -391,39 +426,59 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
             ]),
       ];
 
-  function selectFood(food: LibraryFood) {
+  /**
+   * Links the form to a library food and fills in its nutrition. The amount
+   * and unit become `portion` when the caller knows what was eaten (a scale
+   * reading, an amount stated in text), else the food's default portion. A
+   * default weight or volume only stands in for the real reading, so it lands
+   * focused and selected, for that reading to be typed straight over it.
+   */
+  function selectFood(picked: LibraryFood, portion?: Portion) {
+    // Suggestion rows carry only some of a food's columns; the library has all.
+    const food = foods.find((f) => f.id === picked.id) ?? picked;
+    const start = portion ?? defaultPortion(food);
     setFoodId(food.id);
     setDescription('');
     setRecipe('');
     setRecipeOpen(false);
     setViewingRecipe(false);
     setNutritionOpen(false);
+    setAiEstimatedWeight(false);
     setValues((v) => ({
       ...v,
       name: food.name,
-      unit: food.servingLabel,
+      amount: String(start.amount),
+      unit: start.unit,
       calories: String(food.calories),
       carbs: String(food.carbs),
       protein: String(food.protein),
       fat: String(food.fat),
     }));
+    if (!portion && isMeasureUnit(start.unit)) {
+      // Focus now, while still inside the tap or keypress that picked the food:
+      // phones only raise the keypad for focus given during a user gesture, and
+      // it beats the name field's own post-pick blur, so the keyboard swaps in
+      // place rather than dropping and coming back.
+      amountRef.current?.focus();
+      setAmountSelectRequest((n) => n + 1);
+    }
   }
 
   /** An identify match fills the form like a combobox pick, plus the weight when usable. */
   function handleIdentified(food: LibraryFood, amount: IdentifiedAmount | undefined, image: string) {
-    selectFood(food);
+    // Grams only drive the amount when the food's anchor can convert them;
+    // otherwise it starts at the food's default portion, as a pick would
+    const units = availableUnits({ servingLabel: food.servingLabel, servingSize: food.servingSize });
+    if (amount && units.includes('g')) {
+      selectFood(food, { amount: round1(amount.grams), unit: 'g' });
+      setAiEstimatedWeight(amount.source === 'estimate');
+    } else {
+      selectFood(food);
+    }
     // Auto-attach the identify photo to a matched food that has no image yet.
     // Fire-and-forget so it never delays the prefill or the eventual log, and
     // never overwrites an existing photo.
     if (!food.imagePath) void setFoodImage(food.id, image);
-    // Grams only drive the amount when the food's anchor can convert them
-    const units = availableUnits({ servingLabel: food.servingLabel, servingSize: food.servingSize });
-    if (amount && units.includes('g')) {
-      setValues((v) => ({ ...v, amount: String(round1(amount.grams)), unit: 'g' }));
-      setAiEstimatedWeight(amount.source === 'estimate');
-    } else {
-      setAiEstimatedWeight(false);
-    }
     setIdentifying(false);
   }
 
@@ -436,11 +491,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
   function handleTextItem(item: ResolvedTextLogItem) {
     if (item.foodId) {
       const food = foods.find((f) => f.id === item.foodId);
-      if (food) {
-        selectFood(food);
-        setValues((v) => ({ ...v, amount: String(item.amount), unit: item.unit }));
-        setAiEstimatedWeight(false);
-      }
+      if (food) selectFood(food, { amount: item.amount, unit: item.unit });
     } else {
       applyEstimate({
         id: crypto.randomUUID(),
@@ -595,6 +646,9 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           ? {
               servingLabel: anchor.servingLabel,
               servingSize: anchor.servingSize,
+              // As shown by the picker: a unit the new anchor doesn't offer
+              // is saved as the count label.
+              defaultUnit: resolveDefaultUnit(anchorFields.defaultUnit, anchor),
               calories: result.parsed.calories,
               carbs: result.parsed.carbs,
               protein: result.parsed.protein,
@@ -892,6 +946,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
           <div className="amount-unit">
             <NumberInput
               id={amountInputId}
+              ref={amountRef}
               value={values.amount}
               onChange={(e) => setField('amount', e.target.value)}
             />
@@ -996,6 +1051,7 @@ export function EntryForm({ date, editing, prefill, defaultMeal, onClose }: Entr
                 errors={anchorErrors}
                 onChange={setAnchorField}
                 note="Updates your food library"
+                withDefaultUnit
               />
             )}
 

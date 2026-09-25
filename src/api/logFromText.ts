@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { round1 } from '../lib/totals';
-import { availableUnits } from '../lib/units';
+import { availableUnits, defaultPortion } from '../lib/units';
 import {
   DEFAULT_SERVING_LABEL,
   MEALS,
@@ -203,8 +203,9 @@ export interface ResolvedTextLogItem {
 /**
  * Resolves parsed items for review: matches join back to their library food
  * (dropping any that no longer resolve), amounts follow the same rule as the
- * identify flow — grams only when the food's anchor can convert them, else
- * 1 serving — and an unstated meal falls back to the dialog's meal.
+ * identify flow — a stated count, or grams when the food's anchor can convert
+ * them, else the food's default portion — and an unstated meal falls back to
+ * the dialog's meal.
  */
 export function resolveTextLogItems(
   items: TextLogItem[],
@@ -220,9 +221,13 @@ export function resolveTextLogItems(
         servingLabel: food.servingLabel,
         servingSize: food.servingSize,
       };
-      let amount = item.servings ?? 1;
-      let unit = food.servingLabel;
-      if (item.servings === undefined && item.grams !== undefined && availableUnits(anchor).includes('g')) {
+      // No stated amount, or grams the food can't take: start where picking
+      // the food in the entry form would
+      let { amount, unit } = defaultPortion(food);
+      if (item.servings !== undefined) {
+        amount = item.servings;
+        unit = food.servingLabel;
+      } else if (item.grams !== undefined && availableUnits(anchor).includes('g')) {
         amount = round1(item.grams);
         unit = 'g';
       }

@@ -1,5 +1,10 @@
-import { DEFAULT_SERVING_LABEL, type LibraryFood, type ServingAnchor } from '../types';
-import { availableUnits, isMeasureUnit } from './units';
+import {
+  DEFAULT_SERVING_LABEL,
+  type LibraryFood,
+  type MeasureUnit,
+  type ServingAnchor,
+} from '../types';
+import { availableUnits, isMeasureUnit, resolveDefaultUnit } from './units';
 
 export interface EntryFormValues {
   name: string;
@@ -41,12 +46,21 @@ function parseOptionalNonNegative(raw: string): number | null {
   return parseNonNegative(raw);
 }
 
-/** Form fields for a serving anchor: label + optional equivalence. */
+/**
+ * Form fields for a food's serving definition: label + optional equivalence,
+ * plus the unit its logging starts in.
+ */
 export interface ServingAnchorFormValues {
   servingLabel: string;
   servingSizeAmount: string;
   /** A MeasureUnit, or '' for no equivalence */
   servingSizeUnit: string;
+  /**
+   * Default logging unit: a MeasureUnit, or '' for the count label. Not part
+   * of the anchor itself, so validateServingAnchor ignores it; callers resolve
+   * it against the parsed anchor with resolveDefaultUnit.
+   */
+  defaultUnit: string;
 }
 
 export type ServingAnchorFormErrors = Partial<Record<keyof ServingAnchorFormValues, string>>;
@@ -89,6 +103,17 @@ export function validateServingAnchor(
   return { ok: true, parsed: { servingLabel, servingSize: parsedSize } };
 }
 
+/**
+ * Best-effort parse for UI that follows the fields while they're mid-edit (unit
+ * pickers): the anchor once the fields are valid, count-only until then.
+ */
+export function liveServingAnchor(values: ServingAnchorFormValues): ServingAnchor {
+  const result = validateServingAnchor(values);
+  return result.ok
+    ? result.parsed
+    : { servingLabel: values.servingLabel.trim() || DEFAULT_SERVING_LABEL };
+}
+
 export interface FoodFormValues extends ServingAnchorFormValues {
   name: string;
   description: string;
@@ -105,6 +130,8 @@ export interface ParsedFoodValues extends ServingAnchor {
   name: string;
   description?: string;
   recipe?: string;
+  /** Always present as a key, so spreading it over a food clears an old default */
+  defaultUnit: MeasureUnit | undefined;
   calories: number;
   carbs: number;
   protein: number;
@@ -145,6 +172,9 @@ export function validateFoodForm(
       description: values.description.trim() || undefined,
       recipe: values.recipe.trim() || undefined,
       ...anchor.parsed,
+      // A pick the entered equivalence doesn't offer shows, and so saves, as
+      // the count label.
+      defaultUnit: resolveDefaultUnit(values.defaultUnit, anchor.parsed),
       calories: calories as number,
       carbs: nutrients.carbs as number,
       protein: nutrients.protein as number,

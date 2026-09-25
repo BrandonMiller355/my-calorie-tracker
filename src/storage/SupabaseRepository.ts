@@ -116,6 +116,7 @@ interface FoodRow extends AnchorColumns {
   source: LibraryFood['source'];
   image_path: string | null;
   skip_macro_check: boolean;
+  default_unit: MeasureUnit | null;
 }
 
 function toFoodRow(food: LibraryFood): FoodRow {
@@ -132,6 +133,7 @@ function toFoodRow(food: LibraryFood): FoodRow {
     source: food.source,
     image_path: food.imagePath ?? null,
     skip_macro_check: food.skipMacroCheck ?? false,
+    default_unit: food.defaultUnit ?? null,
   };
 }
 
@@ -149,6 +151,9 @@ function fromFoodRow(row: FoodRow): LibraryFood {
     source: row.source,
     imagePath: row.image_path ?? undefined,
     skipMacroCheck: row.skip_macro_check || undefined,
+    // Absent (not just null) on meal_suggestions() rows, which select a fixed
+    // column list; pickers resolve those against the full library.
+    defaultUnit: row.default_unit ?? undefined,
   };
 }
 
