@@ -2,7 +2,9 @@
 
 ## Purpose
 Log a food already in the personal library without typing its name or weight: photograph the food (typically on the kitchen scale), match it against the library via an AI vision model, and prefill the entry form — including the weight, when readable — with the matched food's nutrition. Falls back to the ai-food-analysis estimate flow when nothing in the library matches.
+
 ## Requirements
+
 ### Requirement: Identify entry point in the Log Food dialog
 The Log Food dialog (entry form in add mode) SHALL offer an "identify from photo" camera action at the top right whenever a photo source (camera capture or file selection) is available. The action MUST NOT be rendered when editing an existing entry, and all other entry-form behavior SHALL be unchanged when the action is unused.
 
@@ -91,15 +93,19 @@ The identification response MAY include a weight amount in grams tagged with its
 - **THEN** the response includes an approximate gram amount with source `estimate`
 
 ### Requirement: Confident match fills the form in place
-When exactly one candidate is returned, the system SHALL fill the open entry form from that library food exactly as if the user had selected it from the name combobox: name, per-serving nutrition, link to the library food, and unit options derived from its serving anchor. When the response includes a weight amount and the food's serving anchor offers grams as a logging unit, the form's amount and unit SHALL be prefilled with that amount in grams; otherwise the amount SHALL default to 1 of the food's serving label. An `estimate`-sourced weight SHALL be visibly labeled as an AI-estimated weight. All prefilled values MUST remain editable before saving. Identification and prefilling MUST NOT themselves modify the library food; once filled, the form behaves exactly as if the food had been picked from the combobox, including the "Edit nutrition" library-update semantics defined by the food-logging capability.
+When exactly one candidate is returned, the system SHALL fill the open entry form from that library food exactly as if the user had selected it from the name combobox: name, per-serving nutrition, link to the library food, and unit options derived from its serving anchor. When the response includes a weight amount and the food's serving anchor offers grams as a logging unit, the form's amount and unit SHALL be prefilled with that amount in grams, and focus SHALL NOT move to the amount field; otherwise the amount and unit SHALL start at the food's default portion, including the focused and selected amount for a weight or volume default, exactly as a combobox pick does (per the food-logging capability). An `estimate`-sourced weight SHALL be visibly labeled as an AI-estimated weight. All prefilled values MUST remain editable before saving. Identification and prefilling MUST NOT themselves modify the library food; once filled, the form behaves exactly as if the food had been picked from the combobox, including the "Edit nutrition" library-update semantics defined by the food-logging capability.
 
 #### Scenario: Match with scale weight
 - **WHEN** identification returns one candidate anchored at "1 serving = 100 g" and 142 grams from the scale
 - **THEN** the form is filled with that food's name and nutrition, amount 142, unit g, and the live computed-nutrition preview reflects 1.42 servings
 
 #### Scenario: Matched food has no weight equivalence
-- **WHEN** identification returns one candidate whose anchor has no weight equivalence, plus a gram amount
+- **WHEN** identification returns one candidate whose anchor has no equivalence, plus a gram amount
 - **THEN** the form is filled with that food and amount 1 of its serving label, ignoring the gram amount
+
+#### Scenario: Weighed food without a usable weight
+- **WHEN** identification returns one candidate anchored at "1 banana = 118 g" with default logging unit g, and no weight amount
+- **THEN** the form is filled with that food at 118 g, with the amount field focused and its value selected
 
 #### Scenario: Estimated weight is labeled
 - **WHEN** the prefilled amount came from source `estimate`
@@ -162,4 +168,3 @@ A cancelled flow SHALL attach nothing. A no-match result SHALL likewise attach n
 #### Scenario: A no-match photo reaches only a newly captured food
 - **WHEN** identification returns no candidates, the user accepts an estimate from the handoff, and saves the entry under a name the library does not know
 - **THEN** the identify photo becomes the newly captured food's image, and no existing library food is touched
-

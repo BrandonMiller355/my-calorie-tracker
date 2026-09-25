@@ -2,9 +2,11 @@
 
 ## Purpose
 Maintain a self-populating, per-user library of saved foods so repeat logging is a one-tap action: foods are captured automatically as they are logged, suggested per meal, searchable from the entry form's name field, and manageable (create/edit/archive) on a dedicated screen.
+
 ## Requirements
+
 ### Requirement: Personal food library
-The system SHALL maintain a per-user library of saved foods. Each library food MUST record a name, per-serving calories, carbs (g), protein (g), and fat (g), and a serving anchor (count label, defaulting to "serving", plus optional single-dimension equivalence per the serving-units capability), and MAY record a description (brand, prep notes) and a recipe (free-text prep instructions). Each library food MUST also record a "skip macro/calorie mismatch check" flag, defaulting to off, which suppresses the macro/calorie mismatch warning when the food is logged (per the food-logging capability). Library foods MUST be deduplicated per user on the normalized (case-insensitive, trimmed) name.
+The system SHALL maintain a per-user library of saved foods. Each library food MUST record a name, per-serving calories, carbs (g), protein (g), and fat (g), and a serving anchor (count label, defaulting to "serving", plus optional single-dimension equivalence per the serving-units capability), and MAY record a description (brand, prep notes) and a recipe (free-text prep instructions). Each library food MUST also record a default logging unit (per the serving-units capability) — its count label unless a weight or volume unit its equivalence offers is chosen — and a "skip macro/calorie mismatch check" flag, defaulting to off, which suppresses the macro/calorie mismatch warning when the food is logged (per the food-logging capability). Library foods MUST be deduplicated per user on the normalized (case-insensitive, trimmed) name.
 
 #### Scenario: Duplicate name resolves to one food
 - **WHEN** a food is captured or created with a name that normalizes to the same value as an existing library food (e.g. "pb&j " vs "PB&J")
@@ -22,12 +24,24 @@ The system SHALL maintain a per-user library of saved foods. Each library food M
 - **WHEN** a library food is captured or created
 - **THEN** its skip macro/calorie mismatch check flag is off, so the mismatch warning applies until the user chooses to save a mismatched entry anyway
 
+#### Scenario: Created foods count by default
+- **WHEN** a library food is created on the library screen without choosing a default logging unit
+- **THEN** its default logging unit is its count label, so logging it starts at 1 of that label
+
 ### Requirement: Silent auto-capture on logging
-When the user logs an entry whose name does not match any library food, the system SHALL silently save it to the library with the entry's nutrition values, the serving anchor as defined in the form, its source (manual or search), and the photo held in the form for that new food, if any (per the food-library-photos capability). When the name matches an existing library food, the system SHALL link the entry to that food. Quick calories-only entries (source `quick`, per the quick-calorie-logging capability) are exempt: logging one MUST NOT create, match, modify, or link any library food. Adjusting nutrition or serving-anchor values in the form for a matched food MUST NOT modify the library food unless the user explicitly did so through the entry form's "Edit nutrition" library-update flow (per the food-logging capability); a matched food's stored values and serving anchor are otherwise left as they were. Auto-capture failure MUST NOT prevent the entry itself from being saved.
+When the user logs an entry whose name does not match any library food, the system SHALL silently save it to the library with the entry's nutrition values, the serving anchor as defined in the form, a default logging unit of the unit the entry was logged in when that is a weight or volume unit (otherwise its count label), its source (manual or search), and the photo held in the form for that new food, if any (per the food-library-photos capability). When the name matches an existing library food, the system SHALL link the entry to that food. Quick calories-only entries (source `quick`, per the quick-calorie-logging capability) are exempt: logging one MUST NOT create, match, modify, or link any library food. Adjusting nutrition, serving-anchor values, or the logged unit in the form for a matched food MUST NOT modify the library food unless the user explicitly did so through the entry form's "Edit nutrition" library-update flow (per the food-logging capability); a matched food's stored values, serving anchor, and default logging unit are otherwise left as they were. Auto-capture failure MUST NOT prevent the entry itself from being saved.
 
 #### Scenario: New food captured on first log
 - **WHEN** the user logs "Chicken breast" for the first time with an anchor of "1 serving = 100 g", whether typed manually or selected from online search
 - **THEN** a library food "Chicken breast" is created with the logged nutrition values and that anchor, without any additional user action
+
+#### Scenario: A food first logged by weight is weighed from then on
+- **WHEN** the user logs "Banana" for the first time as 130 g, with an anchor of "1 banana = 118 g"
+- **THEN** the captured library food's default logging unit is g, so the next time Banana is picked the form starts at 118 g
+
+#### Scenario: A food first logged by count keeps counting
+- **WHEN** the user logs "Bread" for the first time as 2 slice, with an anchor of "1 slice = 28 g"
+- **THEN** the captured library food's default logging unit is its count label, slice
 
 #### Scenario: New food captured with its photo
 - **WHEN** the user logs a food the library does not know and has attached a photo to it in the form
@@ -35,7 +49,7 @@ When the user logs an entry whose name does not match any library food, the syst
 
 #### Scenario: Logging a different amount does not overwrite the library
 - **WHEN** the user selects a library food and only changes the logged amount and unit (without opening "Edit nutrition"), then saves the entry
-- **THEN** the entry reflects the new amount but the library food's nutrition values and serving anchor are unchanged
+- **THEN** the entry reflects the new amount but the library food's nutrition values, serving anchor, and default logging unit are unchanged
 
 #### Scenario: Capture failure does not block logging
 - **WHEN** saving the entry succeeds but saving the library food fails
@@ -88,7 +102,7 @@ As the user types in the name field, the system SHALL match against the library'
 - **THEN** the entry form is not pre-filled and the meal-log confirm sheet opens for that meal
 
 ### Requirement: Library management
-The system SHALL provide a library management screen where the user can view saved foods, create a new food directly ("add food item"), edit a food's name, description, recipe, serving anchor (count label and equivalence), and nutrition values, and archive a food. Archived foods MUST be excluded from suggestions and name search but MUST NOT be deleted. Nutrition values MUST pass the same validation as food entries, and the serving anchor MUST pass serving-units validation. Each food's recipe, when present, MUST be viewable from this screen behind a collapsed "View recipe" disclosure rather than shown inline.
+The system SHALL provide a library management screen where the user can view saved foods, create a new food directly ("add food item"), edit a food's name, description, recipe, serving anchor (count label and equivalence), default logging unit, and nutrition values, and archive a food. Archived foods MUST be excluded from suggestions and name search but MUST NOT be deleted. Nutrition values MUST pass the same validation as food entries, and the serving anchor MUST pass serving-units validation. The default logging unit SHALL be chosen from the food's count label and the measure units of its equivalence's dimension as currently entered in the form; while the form defines no valid equivalence, the count label SHALL be the only choice, and a chosen unit the entered equivalence does not offer SHALL be shown and saved as the count label. Each food's recipe, when present, MUST be viewable from this screen behind a collapsed "View recipe" disclosure rather than shown inline.
 
 The screen SHALL separate saved foods and saved meals into distinct Foods and Meals views. In the Foods view the system SHALL provide a multi-select mode in which the user can select two or more foods and create a saved meal from the selection (per the saved-meals capability). The Meals view SHALL present saved meals for viewing, editing, and archiving as defined by the saved-meals capability.
 
@@ -101,6 +115,14 @@ When editing an existing food, the system SHALL additionally offer a secondary "
 #### Scenario: Edit serving anchor
 - **WHEN** the user changes a food's label to "slice" with equivalence 28 g on the library screen
 - **THEN** future logging of that food offers "slice" and weight units, and past entries are unchanged
+
+#### Scenario: Choose to weigh a food every time
+- **WHEN** the user edits "Banana", anchored at "1 banana = 118 g", on the library screen and sets its default logging unit to g
+- **THEN** future logs of Banana start at 118 g, and past entries are unchanged
+
+#### Scenario: Default logging unit choices follow the equivalence
+- **WHEN** the user edits a food with no equivalence, then enters an equivalence of 120 g
+- **THEN** the count label is the only default logging unit offered until the equivalence is entered, after which the count label and every weight unit are offered
 
 #### Scenario: Archive removes from suggestions only
 - **WHEN** the user archives a library food that appears in past entries
@@ -182,4 +204,3 @@ When the user creates or edits a food on the Food Library screen and its entered
 #### Scenario: A fork does not inherit the opt-out
 - **WHEN** the user forks an opted-out food via "save as new food" and the fork's values still mismatch
 - **THEN** the warning is shown for the fork, independent of the source food's flag
-

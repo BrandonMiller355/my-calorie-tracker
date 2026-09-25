@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-saved-meals. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Saved meal definition
 The system SHALL maintain a per-user collection of saved meals. Each saved meal MUST record a name and an ordered list of components, where each component references a library food and records a logged amount and unit for that food. A saved meal MUST NOT store its own nutrition values; a meal's nutrition is computed on demand by summing each component's referenced library food nutrition, scaled by the servings multiplier derived from the component's amount and unit per the serving-units capability. Saved meals MUST be deduplicated per user on the normalized (case-insensitive, trimmed) name, and a saved meal MAY share a name with a library food. A saved meal MUST have at least one component.
 
@@ -19,11 +21,15 @@ The system SHALL maintain a per-user collection of saved meals. Each saved meal 
 - **THEN** the save is rejected with a duplicate-name error and no second meal is created
 
 ### Requirement: Create a meal from selected foods
-The system SHALL let the user create a saved meal by selecting two or more foods from the food library's Foods list and choosing to create a meal from the selection. The system SHALL open a meal builder seeded with the selected foods, each defaulting to a logged amount of 1 of the food's own serving count (1 serving, or 1 of the food's custom count label). In the builder the user SHALL be able to name the meal and adjust each component's amount and unit (from the units the component food's serving anchor offers) before saving. Saving MUST enforce the saved-meal name validation and per-user normalized-name deduplication.
+The system SHALL let the user create a saved meal by selecting two or more foods from the food library's Foods list and choosing to create a meal from the selection. The system SHALL open a meal builder seeded with the selected foods, each defaulting to that food's default portion (per the serving-units capability): 1 of the food's own serving count (1 serving, or 1 of the food's custom count label), or for a food that defaults to a weight or volume unit, what one count equals in that unit. In the builder the user SHALL be able to name the meal and adjust each component's amount and unit (from the units the component food's serving anchor offers) before saving. Saving MUST enforce the saved-meal name validation and per-user normalized-name deduplication.
 
 #### Scenario: Build a meal from a multi-selection
-- **WHEN** the user selects four foods in the library and chooses "create meal from 4 foods"
+- **WHEN** the user selects four foods in the library, each counted by default, and chooses "create meal from 4 foods"
 - **THEN** a builder opens listing those four foods each at 1 serving, and the user can name the meal and change any component's portion before saving
+
+#### Scenario: Weighed foods seed at their serving weight
+- **WHEN** one of the selected foods is anchored at "1 banana = 118 g" with default logging unit g
+- **THEN** the builder lists that food at 118 g
 
 #### Scenario: Adjust a component portion in the builder
 - **WHEN** the user, in the builder, changes a component from 1 serving to 100 g for a food whose anchor allows weight units
@@ -73,4 +79,3 @@ When a saved meal is logged, the system SHALL skip any component whose reference
 #### Scenario: All components unavailable
 - **WHEN** the user attempts to log a meal whose every component food has been archived or removed
 - **THEN** no entry is created and the sheet indicates there is nothing left to log
-
